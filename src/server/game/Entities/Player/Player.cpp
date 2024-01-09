@@ -136,6 +136,11 @@
 #include <G3D/g3dmath.h>
 #include <sstream>
 
+//npcbot
+#include "botmgr.h"
+#include "botdatamgr.h"
+//end npcbot
+
 #define ZONE_UPDATE_INTERVAL (1*IN_MILLISECONDS)
 
 // corpse reclaim times
@@ -352,6 +357,10 @@ Player::Player(WorldSession* session) : Unit(true), m_sceneMgr(this)
     _restMgr = std::make_unique<RestMgr>(this);
 
     _usePvpItemLevels = false;
+
+    /////////////// NPCBot System //////////////////
+    _botMgr = new BotMgr(this);
+    ///////////// End NPCBot System ////////////////
 }
 
 Player::~Player()
@@ -375,6 +384,10 @@ Player::~Player()
 
     for (uint8 i = 0; i < VOID_STORAGE_MAX_SLOT; ++i)
         delete _voidStorageItems[i];
+
+    //npcbot
+    delete _botMgr;
+    //end npcbot
 
     sWorld->DecreasePlayerCount();
 }
@@ -1162,6 +1175,11 @@ void Player::Update(uint32 p_time)
     //because we don't want player's ghost teleported from graveyard
     if (IsHasDelayedTeleport() && IsAlive())
         TeleportTo(m_teleport_dest, m_teleport_options);
+
+    //NpcBot mod: Update
+    _botMgr->Update(p_time);
+    //end Npcbot
+
 }
 
 void Player::setDeathState(DeathState s)
@@ -1424,6 +1442,11 @@ bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientati
         if (pet)
             UnsummonPetTemporaryIfAny();
 
+        // npcbot: teleport npcbots
+        if (HaveBot())
+            _botMgr->OnTeleportFar(mapid, x, y, z, orientation);
+        // end npcbot
+
         // remove all dyn objects
         RemoveAllDynObjects();
 
@@ -1614,6 +1637,25 @@ bool Player::IsImmunedToSpellEffect(SpellInfo const* spellInfo, SpellEffectInfo 
 
     return Unit::IsImmunedToSpellEffect(spellInfo, spellEffectInfo, caster, requireImmunityPurgesEffectAttribute);
 }
+
+//NPCBOT
+bool Player::HaveBot() const
+{
+    return _botMgr->HaveBot();
+}
+uint8 Player::GetNpcBotsCount() const
+{
+    return _botMgr->GetNpcBotsCount();
+}
+void Player::RemoveAllBots(uint8 removetype)
+{
+    _botMgr->RemoveAllBots(removetype);
+}
+void Player::UpdatePhaseForBots()
+{
+    _botMgr->UpdatePhaseForBots();
+}
+//END NPCBOT
 
 void Player::RegenerateAll()
 {
@@ -1982,6 +2024,11 @@ Creature* Player::GetNPCIfCanInteractWith(ObjectGuid const& guid, NPCFlags npcFl
     if (!creature->GetCharmerGUID().IsEmpty())
         return nullptr;
 
+    //npcbot
+    if (creature->IsNPCBot() && creature->IsWithinDistInMap(this, INTERACTION_DISTANCE))
+        return creature;
+    //end npcbot
+
     // not unfriendly/hostile
     if (!creature->HasUnitFlag2(UNIT_FLAG2_INTERACT_WHILE_HOSTILE) && creature->GetReactionTo(this) <= REP_UNFRIENDLY)
         return nullptr;
@@ -2102,6 +2149,10 @@ void Player::SetGameMaster(bool on)
         m_serverSideVisibilityDetect.SetValue(SERVERSIDE_VISIBILITY_GM, SEC_PLAYER);
     }
 
+    //npcbot: pet is handled already, bots are not, so do it
+    _botMgr->OnOwnerSetGameMaster(on);
+    //end npcbot
+
     UpdateObjectVisibility();
 }
 
@@ -2182,6 +2233,54 @@ void Player::RemoveFromGroup(Group* group, ObjectGuid guid, RemoveMethod method 
 {
     if (!group)
         return;
+
+    // npcbot
+    //npcbot - player is being removed from group - remove bots from that group
+    if (Player* player = ObjectAccessor::FindPlayer(guid))
+    {
+        if (player->HaveBot())
+        {
+            //remove npcbots and set up new group if needed
+            player->GetBotMgr()->RemoveAllBotsFromGroup();
+            group = player->GetGroup();
+            if (!group)
+                return; //group has been disbanded
+        }
+    }
+    //npcbot - deleting player from db: remove bots
+    else if (guid.IsPlayer())
+    {
+        std::vector<ObjectGuid> botguids;
+        botguids.reserve(BotMgr::GetMaxNpcBots() / 2 + 1);
+        BotDataMgr::GetNPCBotGuidsByOwner(botguids, guid);
+        for (std::vector<ObjectGuid>::const_iterator ci = botguids.begin(); ci != botguids.end(); ++ci)
+        {
+            if (group->IsMember(*ci))
+            {
+                if (!group->RemoveMember(*ci, method, kicker, reason))
+                    return;
+            }
+        }
+    }
+    //npcbot - bot is being removed from group - find master and remove bot through botmap
+    else if (guid.IsCreature())
+    {
+        for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+        {
+            if (Player* member = itr->GetSource())
+            {
+                if (!member->HaveBot())
+                    continue;
+
+                if (Creature* bot = member->GetBotMgr()->GetBot(guid))
+                {
+                    member->GetBotMgr()->RemoveBotFromGroup(bot);
+                    return;
+                }
+            }
+        }
+    }
+    // end npcbot
 
     group->RemoveMember(guid, method, kicker, reason);
 }
@@ -2352,6 +2451,10 @@ void Player::GiveLevel(uint8 level)
     PushQuests();
 
     sScriptMgr->OnPlayerLevelChanged(this, oldLevel);
+
+    //npcbot: force bots to update stats
+    _botMgr->SetBotsShouldUpdateStats();
+    //end npcbot
 }
 
 bool Player::IsMaxLevel() const
@@ -4265,6 +4368,11 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_TRAIT_CONFIGS_BY_CHAR);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
+
+            //npcbot - erase npcbots
+            uint32 newOwner = 0;
+            BotDataMgr::UpdateNpcBotDataAll(guid, NPCBOT_UPDATE_OWNER, &newOwner);
+            //end npcbot
 
             sCharacterCache->DeleteCharacterCacheEntry(playerguid, name);
             break;
@@ -6775,6 +6883,49 @@ bool Player::RewardHonor(Unit* victim, uint32 groupsize, int32 honor, bool pvpto
             UpdateCriteria(CriteriaType::EarnHonorableKill, 1, 0, 0, victim);
             UpdateCriteria(CriteriaType::KillPlayer, 1, 0, 0, victim);
         }
+       //npcbot: honor for bots
+        else if (victim->IsNPCBot() && !victim->ToCreature()->IsTempBot())
+        {
+            static const float WANDERING_BOT_HONOR_GAIN_MULT = 10.0f;
+
+            if (!BotMgr::IsBotHKEnabled())
+                return false;
+
+            Creature const* bot = victim->ToCreature();
+
+            uint32 victimTeam = !bot->IsFreeBot() ? bot->GetBotOwner()->GetTeam() : BotDataMgr::GetTeamForFaction(bot->GetFaction());
+            if (GetTeam() == victimTeam && !sWorld->IsFFAPvPRealm())
+                return false;
+
+            uint8 k_level = GetLevel();
+            uint8 k_grey = Trinity::XP::GetGrayLevel(k_level);
+            uint8 v_level = victim->GetLevel();
+
+            if (v_level <= k_grey)
+                return false;
+
+            if (!BotMgr::IsBotHKMessageEnabled())
+                victim_guid.Clear(); // Don't show HK: <rank> message, only log.
+
+            //TODO: honor gain rate
+            honor_f = ceil(Trinity::Honor::hk_honor_at_level_f(k_level) * (v_level - k_grey) / (k_level - k_grey));
+            honor_f *= BotMgr::GetBotHKHonorRate();
+            if (bot->IsWandererBot() && !bot->GetBotBG())
+                honor_f *= WANDERING_BOT_HONOR_GAIN_MULT;
+
+            if (BotMgr::IsBotHKAchievementsEnabled())
+            {
+                ApplyModUInt32Value(PLAYER_FIELD_KILLS, 1, true);
+                ApplyModUInt32Value(PLAYER_FIELD_LIFETIME_HONORABLE_KILLS, 1, true);
+                UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EARN_HONORABLE_KILL);
+                UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HK_CLASS, BotMgr::GetBotPlayerClass(victim->ToCreature()));
+                UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HK_RACE, BotMgr::GetBotPlayerRace(victim->ToCreature()));
+                UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL_AT_AREA, GetAreaId());
+                UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_HONORABLE_KILL, 1, 0, victim);
+                UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_SPECIAL_PVP_KILL, 1, 0, victim);
+            }
+        }
+        //end npcbot
         else
         {
             if (!victim->ToCreature()->IsRacialLeader())
@@ -9092,6 +9243,15 @@ void Player::SendLoot(Loot& loot, bool aeLooting)
 
     if (loot.loot_type == LOOT_CORPSE && !loot.GetOwnerGUID().IsItem())
         SetUnitFlag(UNIT_FLAG_LOOTING);
+
+    // @todo jh figure this out, line 8596 of player.cpp in tcore 3.3.5
+    //npcbot: fill wandering bot kill reward
+    // if (lootid)
+    // {
+    //     if (go->GetEntry() == GO_BOT_MONEY_BAG)
+    //         BotMgr::OnBotWandererKilled(go);
+    // }
+    //end npcbot
 }
 
 void Player::SendLootError(ObjectGuid const& lootObj, ObjectGuid const& owner, LootError error) const
@@ -20298,6 +20458,10 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     // save pet (hunter pet level and experience and all type pets health/mana).
     if (Pet* pet = GetPet())
         pet->SavePetToDB(PET_SAVE_AS_CURRENT);
+
+    //npcbot: save stored items
+    BotDataMgr::SaveNpcBotStoredGear(GetGUID(), trans);
+    //end npcbot
 }
 
 // fast save function for item/money cheating preventing - save only inventory and money state
@@ -22994,6 +23158,18 @@ bool Player::BuyItemFromVendorSlot(ObjectGuid vendorguid, uint32 vendorslot, uin
         return false;
     }
 
+    // npcbot
+    if (HaveBot())
+    {
+        if (!(pProto->AllowableClass & (GetClassMask() | GetBotMgr()->GetAllNpcBotsClassMask())) &&
+            pProto->Bonding == BIND_WHEN_PICKED_UP && !IsGameMaster())
+        {
+            SendBuyError(BUY_ERR_CANT_FIND_ITEM, nullptr, item, 0);
+            return false;
+        }
+    }
+    else
+    // end npcbot
     if (!(pProto->GetAllowableClass() & GetClassMask()) && pProto->GetBonding() == BIND_ON_ACQUIRE && !IsGameMaster())
     {
         SendBuyError(BUY_ERR_CANT_FIND_ITEM, nullptr, item, 0);
@@ -23312,6 +23488,10 @@ void Player::UpdatePvP(bool state, bool _override)
         pvpInfo.EndTimer = GameTime::GetGameTime();
         SetPvP(state);
     }
+
+    //npcbot: update pvp flags for bots
+    _botMgr->UpdatePvPForBots();
+    //end npcbot
 }
 
 void Player::UpdatePotionCooldown(Spell* spell)
@@ -25442,6 +25622,10 @@ bool Player::isHonorOrXPTarget(Unit const* victim) const
 
     if (Creature const* const creature = victim->ToCreature())
     {
+        //npcbot: count npcbots at xp targets (DEPRECATED)
+        if (victim->ToCreature()->IsNPCBotOrPet())
+            return true;
+        //end npcbots
         if (creature->IsCritter() || creature->IsTotem())
             return false;
     }

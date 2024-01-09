@@ -212,6 +212,17 @@ class TC_GAME_API Group
 
         void Update(uint32 diff);
 
+        //npcbot
+        bool Create(Creature* leader);
+        bool AddMember(Creature* creature);
+        void LoadCreatureMemberFromDB(uint32 entry, uint8 memberFlags, uint8 subgroup, uint8 roles);
+        void UpdateBotOutOfRange(Creature* creature);
+        void LinkBotMember(GroupBotReference* bRef);
+        void DelinkBotMember(ObjectGuid guid);
+        GroupBotReference* GetFirstBotMember() { return m_botMemberMgr.getFirst(); }
+        GroupBotReference const* GetFirstBotMember() const { return m_botMemberMgr.getFirst(); }
+        //end npcbot
+        
         // group manipulation methods
         bool Create(Player* leader);
         void LoadGroupFromDB(Field* field);
@@ -379,6 +390,10 @@ class TC_GAME_API Group
         // FG: evil hacks
         void BroadcastGroupUpdate(void);
 
+        //npcbots
+        ObjectGuid const* GetTargetIcons() const { return m_targetIcons; }
+        //end npcbots
+
     protected:
         bool _setMembersGroup(ObjectGuid guid, uint8 group);
         void _homebindIfInstance(Player* player);
@@ -392,6 +407,9 @@ class TC_GAME_API Group
 
         MemberSlotList      m_memberSlots;
         GroupRefManager     m_memberMgr;
+        //npcbot
+        GroupBotRefManager  m_botMemberMgr;
+        //end npcbot
         InvitesList         m_invitees;
         ObjectGuid          m_leaderGuid;
         uint8               m_leaderFactionGroup;

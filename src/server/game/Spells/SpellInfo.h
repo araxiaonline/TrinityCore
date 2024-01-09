@@ -256,6 +256,10 @@ public:
     SpellEffectInfo& operator=(SpellEffectInfo&&) noexcept;
     ~SpellEffectInfo();
 
+    //npcbot
+    void OverrideSpellInfo(SpellInfo const* spellInfo) { ASSERT_NOTNULL(spellInfo); _spellInfo = spellInfo; }
+    //end npcbot
+
     bool IsEffect() const;
     bool IsEffect(SpellEffectName effectName) const;
     bool IsAura() const;
@@ -595,6 +599,10 @@ class TC_GAME_API SpellInfo
         bool MeetsFutureSpellPlayerCondition(Player const* player) const;
 
         bool HasLabel(uint32 labelId) const;
+
+        //npcbot
+        SpellInfo const* TryGetSpellInfoOverride(WorldObject const* caster) const;
+        //end npcbot
 
     private:
         // loading helpers

@@ -1,7 +1,5 @@
 # ![logo](https://community.trinitycore.org/public/style_images/1_trinitycore.png) TrinityCore (master)
 
-[![Average time to resolve an issue](https://isitmaintained.com/badge/resolution/TrinityCore/TrinityCore.svg)](https://isitmaintained.com/project/TrinityCore/TrinityCore "Average time to resolve an issue") [![Percentage of issues still open](https://isitmaintained.com/badge/open/TrinityCore/TrinityCore.svg)](https://isitmaintained.com/project/TrinityCore/TrinityCore "Percentage of issues still open")
-
 --------------
 
 
@@ -26,6 +24,16 @@ master | 3.3.5 | wotlk_classic
 [![master GCC Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/gcc-build.yml/badge.svg?branch=master&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3AGCC+branch%3Amaster+event%3Apush) | [![3.3.5 GCC Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/gcc-build.yml/badge.svg?branch=3.3.5&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3AGCC+branch%3A3.3.5+event%3Apush) | [![wotlk_classic GCC Build status](https://github.com/TrinityCore/TrinityCore/actions/workflows/gcc-build.yml/badge.svg?branch=wotlk_classic&event=push)](https://github.com/TrinityCore/TrinityCore/actions?query=workflow%3AGCC+branch%3Awotlk_classic+event%3Apush)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/435/badge.svg)](https://scan.coverity.com/projects/435) | [![Coverity Scan Build Status](https://scan.coverity.com/projects/4656/badge.svg)](https://scan.coverity.com/projects/4656) |
 
+
+
+
+[![Fetch status](https://github.com/trickerer/NPCBots-cron/actions/workflows/automerge.yml/badge.svg)](https://github.com/trickerer/NPCBots-cron/actions/workflows/automerge.yml)
+
+3.3.5
+:------------:
+[![GCC](https://github.com/trickerer/TrinityCore-3.3.5-with-NPCBots/actions/workflows/gcc-build.yml/badge.svg)](https://github.com/trickerer/TrinityCore-3.3.5-with-NPCBots/actions/workflows/gcc-build.yml)
+[![Build status](https://ci.appveyor.com/api/projects/status/jck8c86eiti50v26/branch/npcbots_3.3.5?svg=true)](https://ci.appveyor.com/project/trickerer/trinitycore-3-3-5-with-npcbots/branch/npcbots_3.3.5)
+
 ## Introduction
 
 TrinityCore is a *MMORPG* Framework based mostly in C++.
@@ -35,13 +43,9 @@ based on the code of that project with extensive changes over time to optimize,
 improve and cleanup the codebase at the same time as improving the in-game
 mechanics and functionality.
 
+[NPCBots](https://github.com/trickerer/Trinity-Bots) is TrinityCore mod.
+
 It is completely open source; community involvement is highly encouraged.
-
-If you wish to contribute ideas or code, please visit our site linked below or
-make pull requests to our [Github repository](https://github.com/TrinityCore/TrinityCore/pulls).
-
-For further information on the TrinityCore project, please visit our project
-website at [TrinityCore.org](https://www.trinitycore.org).
 
 ## Requirements
 
@@ -89,7 +93,8 @@ Read file [AUTHORS](AUTHORS).
 
 ## Links
 
-* [Website](https://www.trinitycore.org)
-* [Wiki](https://www.trinitycore.info)
-* [Forums](https://talk.trinitycore.org/)
-* [Discord](https://discord.trinitycore.org/)
+* [NPCBots Readme](https://github.com/trickerer/Trinity-Bots/)
+* [TrinityCore Website](https://www.trinitycore.org)
+* [TrinityCore Wiki](https://www.trinitycore.info)
+* [TrinityCore Forums](https://talk.trinitycore.org/)
+* [TrinityCore Discord](https://discord.trinitycore.org/)

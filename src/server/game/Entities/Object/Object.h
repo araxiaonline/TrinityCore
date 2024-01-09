@@ -196,6 +196,12 @@ class TC_GAME_API Object
         virtual void BuildUpdate(UpdateDataMapType&) { }
         void BuildFieldsUpdate(Player*, UpdateDataMapType &) const;
 
+        //npcbot
+        virtual bool IsNPCBot() const { return false; }
+        virtual bool IsNPCBotPet() const { return false; }
+        virtual bool IsNPCBotOrPet() const { return false; }
+        //end npcbot
+
         inline bool IsPlayer() const { return GetTypeId() == TYPEID_PLAYER; }
         static Player* ToPlayer(Object* o) { return o ? o->ToPlayer() : nullptr; }
         static Player const* ToPlayer(Object const* o) { return o ? o->ToPlayer() : nullptr; }

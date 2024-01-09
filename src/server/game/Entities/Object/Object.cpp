@@ -59,6 +59,11 @@
 #include <G3D/Vector3.h>
 #include <sstream>
 
+//npcbot
+#include "botdatamgr.h"
+#include "botmgr.h"
+//end npcbot
+
 constexpr float VisibilityDistances[AsUnderlyingType(VisibilityDistanceType::Max)] =
 {
     DEFAULT_VISIBILITY_DISTANCE,
@@ -918,6 +923,11 @@ void WorldObject::setActive(bool on)
     if (GetTypeId() == TYPEID_PLAYER)
         return;
 
+    //npcbot: bots should never be removed from active
+    if (on == false && IsNPCBotOrPet())
+        return;
+    //end npcbot
+
     m_isActive = on;
 
     if (on && !IsInWorld())
@@ -1602,6 +1612,10 @@ bool WorldObject::CanDetect(WorldObject const* obj, bool implicitDetect, bool ch
 {
     WorldObject const* seer = this;
 
+    //npcbot: master's invisibility should not affect bots' sight
+    if (!IsNPCBot())
+    //end npcbot
+
     // If a unit is possessing another one, it uses the detection of the latter
     // Pets don't have detection, they use the detection of their masters
     if (Unit const* thisUnit = ToUnit())
@@ -1884,6 +1898,13 @@ TempSummon* Map::SummonCreature(uint32 entry, Position const& pos, SummonPropert
             summon = new Puppet(properties, summonerUnit);
             break;
         case UNIT_MASK_TOTEM:
+            
+            //npcbot: totem emul step 1
+            if (summoner && summoner->IsNPCBot())
+                summon = new Totem(properties, summoner->ToCreature()->GetBotOwner());
+            else
+            //end npcbot
+            
             summon = new Totem(properties, summonerUnit);
             break;
         case UNIT_MASK_MINION:
@@ -1896,6 +1917,11 @@ TempSummon* Map::SummonCreature(uint32 entry, Position const& pos, SummonPropert
         delete summon;
         return nullptr;
     }
+
+    //npcbot: totem emul step 2
+    if (summoner && summoner->IsNPCBot())
+        summon->SetCreatorGUID(summoner->GetGUID()); // see TempSummon::InitStats()
+    //end npcbot
 
     TransportBase* transport = summoner ? summoner->GetTransport() : nullptr;
     if (transport)
@@ -1948,6 +1974,11 @@ TempSummon* Map::SummonCreature(uint32 entry, Position const& pos, SummonPropert
     }
 
     summon->InitSummon(summoner);
+
+    //npcbot: totem emul step 3
+    if (summoner && summoner->IsNPCBot())
+        summoner->ToCreature()->OnBotSummon(summon);
+    //end npcbot
 
     // call MoveInLineOfSight for nearby creatures
     Trinity::AIRelocationNotifier notifier(*summon);
@@ -2241,11 +2272,24 @@ Player* WorldObject::GetCharmerOrOwnerPlayerOrPlayerItself() const
     if (guid.IsPlayer())
         return ObjectAccessor::GetPlayer(*this, guid);
 
+    //npcbot
+    if (GetTypeId() == TYPEID_UNIT && ToCreature()->IsNPCBotOrPet())
+        if (Unit* creator = ToUnit()->GetCreator())
+            return creator->ToPlayer();
+    //end npcbot
+
     return const_cast<WorldObject*>(this)->ToPlayer();
 }
 
 Player* WorldObject::GetAffectingPlayer() const
 {
+
+    //npcbot: affecting player is creator
+    if (GetTypeId() == TYPEID_UNIT && ToCreature()->IsNPCBotOrPet())
+        if (Unit* creator = ToUnit()->GetCreator())
+            return creator->ToPlayer();
+    //end npcbot
+    
     if (!GetCharmerOrOwnerGUID())
         return const_cast<WorldObject*>(this)->ToPlayer();
 
@@ -2458,6 +2502,11 @@ void WorldObject::ModSpellCastTime(SpellInfo const* spellInfo, int32& castTime, 
     if (Player* modOwner = GetSpellModOwner())
         modOwner->ApplySpellMod(spellInfo, SpellModOp::ChangeCastTime, castTime, spell);
 
+    //npcbot - apply bot spell cast time mods
+    if (castTime > 0 && IsNPCBot())
+        ToCreature()->ApplyCreatureSpellCastTimeMods(spellInfo, castTime);
+    //end npcbot
+
     Unit const* unitCaster = ToUnit();
     if (!unitCaster)
         return;
@@ -2486,6 +2535,11 @@ void WorldObject::ModSpellDurationTime(SpellInfo const* spellInfo, int32& durati
     // called from caster
     if (Player* modOwner = GetSpellModOwner())
         modOwner->ApplySpellMod(spellInfo, SpellModOp::ChangeCastTime, duration, spell);
+
+    //npcbot - apply bot spell cast time mods
+    if (duration > 0 && IsNPCBot())
+        ToCreature()->ApplyCreatureSpellCastTimeMods(spellInfo, duration);
+    //end npcbot
 
     Unit const* unitCaster = ToUnit();
     if (!unitCaster)

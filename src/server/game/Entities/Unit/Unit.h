@@ -1912,6 +1912,11 @@ class TC_GAME_API Unit : public WorldObject
 
         UF::UpdateField<UF::UnitData, 0, TYPEID_UNIT> m_unitData;
 
+        //npcbot
+        bool HasReactive(ReactiveType reactive) const { return m_reactiveTimer[reactive] > 0; }
+        void ClearReactive(ReactiveType reactive);
+        //end npcbot
+
     protected:
         explicit Unit (bool isWorldObject);
 

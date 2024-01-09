@@ -38,6 +38,11 @@
 #include "Vehicle.h"
 #include <G3D/g3dmath.h>
 
+//npcbot
+#include "botmgr.h"
+#include "botspell.h"
+//end npcbot
+
 uint32 GetTargetFlagMask(SpellTargetObjectTypes objType)
 {
     switch (objType)
@@ -539,10 +544,38 @@ int32 SpellEffectInfo::CalcValue(WorldObject const* caster /*= nullptr*/, int32 
     if (casterUnit)
     {
         // bonus amount from combo points
-        if (comboDamage)
-            if (int32 comboPoints = casterUnit->GetPower(POWER_COMBO_POINTS))
-                value += comboDamage * comboPoints;
-    }
+        // if (comboDamage)
+        //     if (int32 comboPoints = casterUnit->GetPower(POWER_COMBO_POINTS))
+        //         value += comboDamage * comboPoints;
+
+        //npcbot: Life Burst heal tempfix 2013
+        float pointsPerComboPoint = comboDamage;
+        if (_spellInfo->Id == 57143 && EffectIndex == EFFECT_1)
+        {
+            basePoints = 2500;
+            value = float(basePoints);
+            pointsPerComboPoint = 2500.f;
+        }
+        //npcbot: bonus amount from combo points and specific mods
+        if (casterUnit->IsNPCBot())
+        {
+            if (uint8 comboPoints = casterUnit->ToCreature()->GetCreatureComboPoints())
+                value += pointsPerComboPoint * comboPoints;
+        }
+        //npcbot: bonus amount from combo points (vehicle)
+        else if (casterUnit->IsVehicle() && casterUnit->GetTypeId() == TYPEID_UNIT && casterUnit->GetCharmerGUID().IsCreature() &&
+            comboDamage)
+        {
+            Unit const* bot = casterUnit->GetCharmer();
+            if (bot && bot->IsNPCBot())
+                if (uint8 comboPoints = bot->ToCreature()->GetCreatureComboPoints())
+                    value += pointsPerComboPoint * comboPoints;
+        }
+        //npcbot: bonus amount from combo points
+        else if (uint8 comboPoints = casterUnit->GetComboPoints())
+            value += pointsPerComboPoint * comboPoints;
+        //end npcbot
+        }
 
     if (caster)
         value = caster->ApplyEffectModifiers(_spellInfo, EffectIndex, value);

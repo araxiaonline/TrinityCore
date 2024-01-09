@@ -605,6 +605,15 @@ class BattlegroundAV : public Battleground
         }
 
         BG_AV_Nodes GetNodeThroughObject(uint32 object);
+
+        //npcbot
+        /*
+        //end npcbot
+        uint32 GetObjectThroughNode(BG_AV_Nodes node);
+        //npcbot
+        */
+        uint32 GetObjectThroughNode(BG_AV_Nodes node, bool log = true) const;
+        //end npcbot
         bool IsTower(BG_AV_Nodes node) const { return _nodes[node].Tower; }
 
         /*mine*/

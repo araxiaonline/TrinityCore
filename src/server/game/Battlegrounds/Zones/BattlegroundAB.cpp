@@ -193,7 +193,166 @@ void BattlegroundAB::_CalculateTeamNodes(uint8& alliance, uint8& horde)
     }
 }
 
-Team BattlegroundAB::GetPrematureWinner()
+//npcbot
+void BattlegroundAB::EventBotClickedOnFlag(Creature* bot, GameObject* /*target_obj*/)
+{
+    if (GetStatus() != STATUS_IN_PROGRESS)
+        return;
+
+    uint8 node = BG_AB_NODE_STABLES;
+    GameObject* obj = GetBgMap()->GetGameObject(BgObjects[node*8+7]);
+    while ((node < BG_AB_DYNAMIC_NODES_COUNT) && ((!obj) || (!bot->IsWithinDistInMap(obj, 10))))
+    {
+        ++node;
+        obj = GetBgMap()->GetGameObject(BgObjects[node*8+BG_AB_OBJECT_AURA_CONTESTED]);
+    }
+
+    if (node == BG_AB_DYNAMIC_NODES_COUNT)
+    {
+        // this means our player isn't close to any of banners - maybe cheater ??
+        return;
+    }
+
+    TeamId teamIndex = GetBotTeamId(bot->GetGUID());
+
+    // Check if player really could use this banner, not cheated
+    if (!(m_Nodes[node] == 0 || teamIndex == m_Nodes[node]%2))
+        return;
+
+    bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_ENTER_PVP_COMBAT);
+    uint32 sound = 0;
+    // If node is neutral, change to contested
+    if (m_Nodes[node] == BG_AB_NODE_TYPE_NEUTRAL)
+    {
+        UpdateBotScore(bot, SCORE_BASES_ASSAULTED, 1);
+        m_prevNodes[node] = m_Nodes[node];
+        m_Nodes[node] = teamIndex + 1;
+        // burn current neutral banner
+        _DelBanner(node, BG_AB_NODE_TYPE_NEUTRAL, 0);
+        // create new contested banner
+        _CreateBanner(node, BG_AB_NODE_TYPE_CONTESTED, teamIndex, true);
+        _SendNodeUpdate(node);
+        m_NodeTimers[node] = BG_AB_FLAG_CAPTURING_TIME;
+
+        if (teamIndex == TEAM_ALLIANCE)
+            SendBroadcastText(ABNodes[node].TextAllianceClaims, CHAT_MSG_BG_SYSTEM_ALLIANCE, bot);
+        else
+            SendBroadcastText(ABNodes[node].TextHordeClaims, CHAT_MSG_BG_SYSTEM_HORDE, bot);
+
+        sound = BG_AB_SOUND_NODE_CLAIMED;
+    }
+    // If node is contested
+    else if ((m_Nodes[node] == BG_AB_NODE_STATUS_ALLY_CONTESTED) || (m_Nodes[node] == BG_AB_NODE_STATUS_HORDE_CONTESTED))
+    {
+        // If last state is NOT occupied, change node to enemy-contested
+        if (m_prevNodes[node] < BG_AB_NODE_TYPE_OCCUPIED)
+        {
+            UpdateBotScore(bot, SCORE_BASES_ASSAULTED, 1);
+            m_prevNodes[node] = m_Nodes[node];
+            m_Nodes[node] = teamIndex + BG_AB_NODE_TYPE_CONTESTED;
+            // burn current contested banner
+            _DelBanner(node, BG_AB_NODE_TYPE_CONTESTED, !teamIndex);
+            // create new contested banner
+            _CreateBanner(node, BG_AB_NODE_TYPE_CONTESTED, teamIndex, true);
+            _SendNodeUpdate(node);
+            m_NodeTimers[node] = BG_AB_FLAG_CAPTURING_TIME;
+
+            if (teamIndex == TEAM_ALLIANCE)
+                SendBroadcastText(ABNodes[node].TextAllianceAssaulted, CHAT_MSG_BG_SYSTEM_ALLIANCE, bot);
+            else
+                SendBroadcastText(ABNodes[node].TextHordeAssaulted, CHAT_MSG_BG_SYSTEM_HORDE, bot);
+        }
+        // If contested, change back to occupied
+        else
+        {
+            UpdateBotScore(bot, SCORE_BASES_DEFENDED, 1);
+            m_prevNodes[node] = m_Nodes[node];
+            m_Nodes[node] = teamIndex + BG_AB_NODE_TYPE_OCCUPIED;
+            // burn current contested banner
+            _DelBanner(node, BG_AB_NODE_TYPE_CONTESTED, !teamIndex);
+            // create new occupied banner
+            _CreateBanner(node, BG_AB_NODE_TYPE_OCCUPIED, teamIndex, true);
+            _SendNodeUpdate(node);
+            m_NodeTimers[node] = 0;
+            _NodeOccupied(node, (teamIndex == TEAM_ALLIANCE) ? ALLIANCE : HORDE);
+
+            if (teamIndex == TEAM_ALLIANCE)
+                SendBroadcastText(ABNodes[node].TextAllianceDefended, CHAT_MSG_BG_SYSTEM_ALLIANCE, bot);
+            else
+                SendBroadcastText(ABNodes[node].TextHordeDefended, CHAT_MSG_BG_SYSTEM_HORDE, bot);
+        }
+        sound = (teamIndex == TEAM_ALLIANCE) ? BG_AB_SOUND_NODE_ASSAULTED_ALLIANCE : BG_AB_SOUND_NODE_ASSAULTED_HORDE;
+    }
+    // If node is occupied, change to enemy-contested
+    else
+    {
+        UpdateBotScore(bot, SCORE_BASES_ASSAULTED, 1);
+        m_prevNodes[node] = m_Nodes[node];
+        m_Nodes[node] = teamIndex + BG_AB_NODE_TYPE_CONTESTED;
+        // burn current occupied banner
+        _DelBanner(node, BG_AB_NODE_TYPE_OCCUPIED, !teamIndex);
+        // create new contested banner
+        _CreateBanner(node, BG_AB_NODE_TYPE_CONTESTED, teamIndex, true);
+        _SendNodeUpdate(node);
+        _NodeDeOccupied(node);
+        m_NodeTimers[node] = BG_AB_FLAG_CAPTURING_TIME;
+
+        if (teamIndex == TEAM_ALLIANCE)
+            SendBroadcastText(ABNodes[node].TextAllianceAssaulted, CHAT_MSG_BG_SYSTEM_ALLIANCE, bot);
+        else
+            SendBroadcastText(ABNodes[node].TextHordeAssaulted, CHAT_MSG_BG_SYSTEM_HORDE, bot);
+
+        sound = (teamIndex == TEAM_ALLIANCE) ? BG_AB_SOUND_NODE_ASSAULTED_ALLIANCE : BG_AB_SOUND_NODE_ASSAULTED_HORDE;
+    }
+
+    // If node is occupied again, send "X has taken the Y" msg.
+    if (m_Nodes[node] >= BG_AB_NODE_TYPE_OCCUPIED)
+    {
+        if (teamIndex == TEAM_ALLIANCE)
+            SendBroadcastText(ABNodes[node].TextAllianceTaken, CHAT_MSG_BG_SYSTEM_ALLIANCE);
+        else
+            SendBroadcastText(ABNodes[node].TextHordeTaken, CHAT_MSG_BG_SYSTEM_HORDE);
+    }
+    PlaySoundToAll(sound);
+}
+
+bool BattlegroundAB::IsNodeOccupied(uint8 node, TeamId teamId) const
+{
+    if (node < BG_AB_DYNAMIC_NODES_COUNT)
+    {
+        switch (teamId)
+        {
+            case TEAM_ALLIANCE:
+                return m_Nodes[node] == BG_AB_NODE_STATUS_ALLY_OCCUPIED;
+            case TEAM_HORDE:
+                return m_Nodes[node] == BG_AB_NODE_STATUS_HORDE_OCCUPIED;
+            default:
+                break;
+        }
+    }
+
+    return false;
+}
+bool BattlegroundAB::IsNodeContested(uint8 node, TeamId teamId) const
+{
+    if (node < BG_AB_DYNAMIC_NODES_COUNT)
+    {
+        switch (teamId)
+        {
+            case TEAM_ALLIANCE:
+                return m_Nodes[node] == BG_AB_NODE_STATUS_ALLY_CONTESTED;
+            case TEAM_HORDE:
+                return m_Nodes[node] == BG_AB_NODE_STATUS_HORDE_CONTESTED;
+            default:
+                break;
+        }
+    }
+
+    return false;
+}
+//end npcbot
+
+uint32 BattlegroundAB::GetPrematureWinner()
 {
     // How many bases each team owns
     uint8 ally = 0, horde = 0;
