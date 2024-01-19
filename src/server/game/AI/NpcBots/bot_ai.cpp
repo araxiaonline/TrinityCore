@@ -45,8 +45,10 @@
 #include "TemporarySummon.h"
 #include "Transport.h"
 #include "World.h"
-
 #include "G3DPosition.hpp"
+
+#include <sstream>
+
 /*
 NpcBot System by Trickerer (https://github.com/trickerer/Trinity-Bots; onlysuffering@gmail.com)
 Version 5.2.77a
@@ -318,7 +320,7 @@ void bot_ai::GenerateRand() const
     __rand = urand(0, IAmFree() ? 100 : 100 + (master->GetNpcBotsCount() - 1) * 2);
 }
 
-const std::string& bot_ai::LocalizedNpcText(Player const* forPlayer, uint32 textId)
+const std::string bot_ai::LocalizedNpcText(Player const* forPlayer, uint32 textId)
 {
     LocaleConstant loc = forPlayer ? forPlayer->GetSession()->GetSessionDbLocaleIndex() : sWorld->GetDefaultDbcLocale();
 
@@ -337,7 +339,9 @@ const std::string& bot_ai::LocalizedNpcText(Player const* forPlayer, uint32 text
     if(NpcText const* nt = sObjectMgr->GetNpcText(textId))
     {
             BroadcastTextEntry const* bct = sBroadcastTextStore.LookupEntry(nt->Data[0].BroadcastTextID);
-            return std::string(DB2Manager::GetBroadcastTextValue(bct, loc, forPlayer ? forPlayer->GetGender() : GENDER_MALE));
+            std::string npcTextString(DB2Manager::GetBroadcastTextValue(bct, loc, forPlayer ? forPlayer->GetGender() : GENDER_MALE));
+            // return std::string(DB2Manager::GetBroadcastTextValue(bct, loc, forPlayer ? forPlayer->GetGender() : GENDER_MALE));
+            return npcTextString;
     }
 
     // end not sureness
@@ -1578,7 +1582,8 @@ void bot_ai::BuffAndHealGroup(uint32 diff)
         {
             if (BotMgr::GetHealTargetIconFlags() & GroupIconsFlags[i])
             {
-                if (ObjectGuid guid = pGroup->GetTargetIcons()[i])
+                ObjectGuid guid = pGroup->GetTargetIcons()[i];
+                if (!guid.IsEmpty())
                 {
                     if (Unit* unit = ObjectAccessor::GetUnit(*me, guid))
                     {
@@ -1656,10 +1661,10 @@ void bot_ai::ResurrectGroup(uint32 spell_id)
     if (!spell_id || Rand() > 10)
         return;
 
-    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell_id);
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell_id, me->GetMap()->GetDifficultyID());
     ASSERT(spellInfo);
     spellInfo = spellInfo->TryGetSpellInfoOverride(me);
-    if (int32(me->GetPower(spellInfo->PowerType)) < spellInfo->CalcPowerCost(me, spellInfo->GetSchoolMask()))
+    if (int32(me->GetPower(static_cast<Powers>(spellInfo->PowerCosts[0]->PowerType))) < spellInfo->CalcPowerCost(me, spellInfo->GetSchoolMask())[spellInfo->PowerCosts[0]->PowerType].Amount)
         return;
 
     //TC_LOG_ERROR("entities.player", "ResurrectGroup by {}", me->GetName());
@@ -1696,7 +1701,7 @@ void bot_ai::ResurrectGroup(uint32 spell_id)
         player = master;
         if (!player->IsAlive() && !player->IsResurrectRequested())
         {
-            target = player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST) ? player->ToUnit() : (Unit*)player->GetCorpse();
+            target = player->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? player->ToUnit() : (Unit*)player->GetCorpse();
             if (target && target->IsInWorld() && me->GetMap() == target->FindMap() &&
                 !player->GetBotMgr()->IsBeingResurrected(target))
             {
@@ -1739,7 +1744,7 @@ void bot_ai::ResurrectGroup(uint32 spell_id)
             if (!Bots && player->HaveBot())
                 Bots = true;
             if (player->IsAlive() || player->IsResurrectRequested()) continue;
-            if (player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST))
+            if (player->HasPlayerFlag(PLAYER_FLAGS_GHOST))
                 target = (Unit*)player->GetCorpse();
             if (!target || !target->IsInWorld()) continue;
             if (target->GetTypeId() != player->GetTypeId() && me->GetMap() != target->FindMap()) continue;
@@ -1941,7 +1946,7 @@ bool bot_ai::_canCureTarget(Unit const* target, uint32 cureSpell) const
     if (target->GetTypeId() == TYPEID_UNIT && target->ToCreature()->IsTempBot()) return false;
     if (target->HasAuraType(SPELL_AURA_MOD_POSSESS) && !IsInBotParty(target)) return false;
 
-    SpellInfo const* info = sSpellMgr->GetSpellInfo(cureSpell);
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(cureSpell, me->GetMap()->GetDifficultyID());
     if (!info)
         return false;
     info = info->TryGetSpellInfoOverride(me);
@@ -1951,8 +1956,8 @@ bool bot_ai::_canCureTarget(Unit const* target, uint32 cureSpell) const
 
     uint32 dispelMask = 0;
     for (uint8 i = 0; i != MAX_SPELL_EFFECTS; ++i)
-        if (info->_effects[i].Effect == SPELL_EFFECT_DISPEL)
-            dispelMask |= SpellInfo::GetDispelMask(DispelType(info->_effects[i].MiscValue));
+        if (info->GetEffects()[i].Effect == SPELL_EFFECT_DISPEL)
+            dispelMask |= SpellInfo::GetDispelMask(DispelType(info->GetEffects()[i].MiscValue));
 
     //SpellBreaker addins
     if (cureSpell == SPELL_STEAL_MAGIC)
@@ -2172,32 +2177,20 @@ void bot_ai::_listAuras(Player const* player, Unit const* unit) const
     botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_DMG_TAKEN_MELEE) << ": " << float(dmg_taken_phy * unit->GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN, SPELL_SCHOOL_MASK_NORMAL));
     botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_DMG_TAKEN_SPELL) << ": " << float(dmg_taken_mag * unit->GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN, SPELL_SCHOOL_MASK_MAGIC));
 
-    //float resilience_base = unit->GetMeleeCritChanceReduction();
-    //botstring << "\n" << "Resilience pct" << ": -" << resilience_base << " / -" << float(resilience_base * 2.2f) << " / -" << float(resilience_base * 2.0f);
-
-    //npcbot
     float minDamage, maxDamage;
     unit->CalculateMinMaxDamage(BASE_ATTACK, true, true, minDamage, maxDamage);
-    //end npcbot    
 
     WeaponAttackType type = BASE_ATTACK;
     float attSpeed = (unit->GetBaseAttackTime(type) * unit->m_modAttackSpeedPct[type])/1000.f;
 
-    // npcbot
-    //botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_DMG_RANGE_MAINHAND) << ": " << LocalizedNpcText(player, BOT_TEXT_MIN) << ": " << int32(unit->GetFloatValue(UNIT_FIELD_MINDAMAGE)) << ", " << LocalizedNpcText(player, BOT_TEXT_MAX) << ": " << int32(unit->GetFloatValue(UNIT_FIELD_MAXDAMAGE) + 1.f);
     botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_DMG_RANGE_MAINHAND) << ": " 
         << LocalizedNpcText(player, BOT_TEXT_MIN) << ": " << minDamage << ", " 
         << LocalizedNpcText(player, BOT_TEXT_MAX) << ": " << (maxDamage + 1.f);
-    //end npcbot
 
     botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_DMG_MULT_MAINHAND) << ": " << float(unit->GetPctModifierValue(UNIT_MOD_DAMAGE_MAINHAND, BASE_PCT)*unit->GetPctModifierValue(UNIT_MOD_DAMAGE_MAINHAND, TOTAL_PCT));
 
-    //npcbot
-    //botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_ATTACK_TIME_MAINHAND) << ": " << float(attSpeed)
-    //    << " (" << float(((unit->GetFloatValue(UNIT_FIELD_MINDAMAGE) + unit->GetFloatValue(UNIT_FIELD_MAXDAMAGE)) / 2) / attSpeed) << " " << LocalizedNpcText(player, BOT_TEXT_DPS) << ")";
     botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_ATTACK_TIME_MAINHAND) << ": " << float(attSpeed)
         << " (" << float(((minDamage + maxDamage) / 2) / attSpeed) << " " << LocalizedNpcText(player, BOT_TEXT_DPS) << ")";
-    //end npcbot
 
     if (unit->haveOffhandWeapon())
     {
@@ -2224,39 +2217,40 @@ void bot_ai::_listAuras(Player const* player, Unit const* unit) const
         //end npcbot
 
     }
+
+    EquipmentInfo const* einfo = BotDataMgr::GetBotEquipmentInfo(me->GetEntry());
+    Item const* rangedItem = _equips[BOT_SLOT_RANGED]; //->ItemEntry[BOT_SLOT_RANGED];
+
     if (unit != me ||
-        (me->GetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + uint32(BOT_SLOT_RANGED)) &&
-        _botclass != BOT_CLASS_PALADIN &&
-        _botclass != BOT_CLASS_DEATH_KNIGHT &&
-        _botclass != BOT_CLASS_DRUID &&
-        _botclass != BOT_CLASS_SHAMAN))
+        (
+            rangedItem &&
+            _botclass != BOT_CLASS_PALADIN &&
+            _botclass != BOT_CLASS_DEATH_KNIGHT &&
+            _botclass != BOT_CLASS_DRUID &&
+            _botclass != BOT_CLASS_SHAMAN
+        )
+    )
     {
         type = RANGED_ATTACK;
 
-        //npcbot
-        //attSpeed = (unit->GetAttackTime(type) * unit->m_modAttackSpeedPct[type])/1000.f;
         attSpeed = (unit->GetBaseAttackTime(type) * unit->m_modAttackSpeedPct[type])/1000.f;
         unit->CalculateMinMaxDamage(type, true, true, minDamage, maxDamage);
 
-        //botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_DMG_RANGE_RANGED) << ": " << LocalizedNpcText(player, BOT_TEXT_MIN) << ": " << int32(unit->GetFloatValue(UNIT_FIELD_MINRANGEDDAMAGE)) << ", " << LocalizedNpcText(player, BOT_TEXT_MAX) << ": " << int32(unit->GetFloatValue(UNIT_FIELD_MAXRANGEDDAMAGE) + 1.f);
         botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_DMG_RANGE_RANGED) << ": " 
             << LocalizedNpcText(player, BOT_TEXT_MIN) << ": " << int32(minDamage) << ", " 
             << LocalizedNpcText(player, BOT_TEXT_MAX) << ": " << int32(maxDamage + 1.f);
-        //end npcbot
 
         botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_DMG_MULT_RANGED) << ": " << float(unit->GetPctModifierValue(UNIT_MOD_DAMAGE_RANGED, BASE_PCT)*unit->GetPctModifierValue(UNIT_MOD_DAMAGE_RANGED, TOTAL_PCT));
 
-        //npcbot
-        //botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_ATTACK_TIME_RANGED) << ": " << float(attSpeed)
-        //    << " (" << float(((unit->GetFloatValue(UNIT_FIELD_MINRANGEDDAMAGE) + unit->GetFloatValue(UNIT_FIELD_MAXRANGEDDAMAGE)) / 2) / attSpeed) << " " << LocalizedNpcText(player, BOT_TEXT_DPS) << ")";
         botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_ATTACK_TIME_RANGED) << ": " << float(attSpeed)
             << " (" << float(((minDamage + maxDamage) / 2) / attSpeed) << " " << LocalizedNpcText(player, BOT_TEXT_DPS) << ")";
-        //end npcbot
     }
+
     botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_BASE_HP) << ": " << int32(unit->GetCreateHealth());
     botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_TOTAL_HP) << ": " << int32(unit->GetMaxHealth());
     botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_BASE_MP) << ": " << int32(unit->GetCreateMana());
     botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_TOTAL_MP) << ": " << int32(unit->GetMaxPower(POWER_MANA));
+
     if (unit->GetMaxPower(POWER_MANA) > 1 && unit->GetPowerType() != POWER_MANA)
         botstring << "\n" << LocalizedNpcText(player, BOT_TEXT_CURR_MP) << ": " << int32(unit->GetPower(POWER_MANA));
 
@@ -2406,7 +2400,8 @@ void bot_ai::SetStats(bool force)
             //mylevel = urand(me->GetCreatureTemplate()-> minlevel, me->GetCreatureTemplate()->maxlevel);
             mylevel = urand(1, DEFAULT_MAX_LEVEL);
 
-            mylevel += BotDataMgr::GetLevelBonusForBotRank(me->GetCreatureTemplate()->rank);
+            uint32 creatureClass = (uint32)me->GetCreatureTemplate()->Classification;
+            mylevel += BotDataMgr::GetLevelBonusForBotRank(creatureClass);
             _baseLevel = std::max<uint8>(mylevel, BotDataMgr::GetMinLevelForBotClass(_botclass));
             if (me->GetMap()->IsBattlegroundOrArena())
                 TC_LOG_DEBUG("npcbots", "BG bot {} id {} selected level {}...", me->GetName(), me->GetEntry(), uint32(_baseLevel));
@@ -2416,13 +2411,18 @@ void bot_ai::SetStats(bool force)
         else if (me->GetMap()->GetEntry()->IsContinent())
         {
             uint8 mapmaxlevel = BotDataMgr::GetMaxLevelForMapId(me->GetMap()->GetEntry()->ID);
-            mapmaxlevel += BotDataMgr::GetLevelBonusForBotRank(me->GetCreatureTemplate()->rank);
+            uint32 mapLevelBonus = BotDataMgr::GetLevelBonusForBotRank((uint32)me->GetCreatureTemplate()->Classification);
+            mapmaxlevel += mapLevelBonus;
             //TODO: experience system for levelups
             mylevel = std::max<uint8>(mylevel, std::min<uint8>(_baseLevel + uint8(_killsCount / (mylevel * 20)), mapmaxlevel));
         }
     }
     else
-        mylevel += BotDataMgr::GetLevelBonusForBotRank(me->GetCreatureTemplate()->rank);
+    {
+        uint32 creatureLevel = (uint32)me->GetCreatureTemplate()->Classification;
+        uint32 levelBonus = BotDataMgr::GetLevelBonusForBotRank(creatureLevel);
+        mylevel += levelBonus;
+    }
 
     mylevel = std::min<uint8>(mylevel, DEFAULT_MAX_LEVEL + 3);
 
@@ -3088,25 +3088,27 @@ void bot_ai::SetStats(bool force)
         value = IAmFree() ? mylevel / 4 : 0; // +20%/+0% at 80
         tempval = value;
 
-        GtChanceToMeleeCritBaseEntry const* critBaseMelee  = sGtChanceToMeleeCritBaseStore.LookupEntry(GetPlayerClass()-1);
-        GtChanceToMeleeCritEntry const* critRatioMelee = sGtChanceToMeleeCritStore.LookupEntry((GetPlayerClass()-1)*GT_MAX_LEVEL + mylevel-1);
-        if (critBaseMelee && critRatioMelee)
-            value += (critBaseMelee->Data + _getTotalBotStat(BOT_STAT_MOD_AGILITY) * critRatioMelee->Data) * 100.0f;
+        // @todo jh This needs to actually use bot crit extras rather than just defaults
+        // GtChanceToMeleeCritBaseEntry const* critBaseMelee  = sGtChanceToMeleeCritBaseStore.LookupEntry(GetPlayerClass()-1);
+        // GtChanceToMeleeCritEntry const* critRatioMelee = sGtChanceToMeleeCritStore.LookupEntry((GetPlayerClass()-1)*GT_MAX_LEVEL + mylevel-1);
 
-        //crit from intellect
-        GtChanceToSpellCritBaseEntry const* critBaseSpell  = sGtChanceToSpellCritBaseStore.LookupEntry(GetPlayerClass()-1);
-        GtChanceToSpellCritEntry const* critRatioSpell = sGtChanceToSpellCritStore.LookupEntry((GetPlayerClass()-1)*GT_MAX_LEVEL + mylevel-1);
-        if (critBaseSpell && critRatioSpell)
-            tempval += (critBaseSpell->Data + _getTotalBotStat(BOT_STAT_MOD_INTELLECT) * critRatioSpell->Data) * 100.f;
+        // if (critBaseMelee && critRatioMelee)
+        //     value += (critBaseMelee->Data + _getTotalBotStat(BOT_STAT_MOD_AGILITY) * critRatioMelee->Data) * 100.0f;
 
-        value = std::max<float>(value, tempval);
+        // //crit from intellect
+        // GtChanceToSpellCritBaseEntry const* critBaseSpell  = sGtChanceToSpellCritBaseStore.LookupEntry(GetPlayerClass()-1);
+        // GtChanceToSpellCritEntry const* critRatioSpell = sGtChanceToSpellCritStore.LookupEntry((GetPlayerClass()-1)*GT_MAX_LEVEL + mylevel-1);
+        // if (critBaseSpell && critRatioSpell)
+        //     tempval += (critBaseSpell->Data + _getTotalBotStat(BOT_STAT_MOD_INTELLECT) * critRatioSpell->Data) * 100.f;
+
+        // value = std::max<float>(value, tempval);
 
         //45 CR = 1% crit at 80
         tempval = _getTotalBotStat(BOT_STAT_MOD_CRIT_MELEE_RATING) + _getTotalBotStat(BOT_STAT_MOD_CRIT_RANGED_RATING) + _getTotalBotStat(BOT_STAT_MOD_CRIT_SPELL_RATING) + _getTotalBotStat(BOT_STAT_MOD_CRIT_RATING);
         tempval += me->GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_RATING, (1 << CR_CRIT_MELEE) | (1 << CR_CRIT_RANGED) | (1 << CR_CRIT_SPELL));
 
         //Molten Armor: 35% spirit to crit rating (+40% double-glyphed + 15% T9P2 bonus)
-        if (_botclass == BOT_CLASS_MAGE && me->HasAuraTypeWithFamilyFlags(SPELL_AURA_MOD_RATING_FROM_STAT, SPELLFAMILY_MAGE, 0x40000))
+        if (_botclass == BOT_CLASS_MAGE && me->HasAuraTypeWithFamilyFlags(SPELL_AURA_MOD_STAT, SPELLFAMILY_MAGE, 0x40000))
             tempval += _getTotalBotStat(BOT_STAT_MOD_SPIRIT) * (mylevel >= 80 ? 0.9f : mylevel >= 70 ? 0.75f : 0.55f);
         //Firestone: just emulate the rating bonus
         if (_botclass == BOT_CLASS_WARLOCK)
@@ -3150,9 +3152,13 @@ void bot_ai::SetStats(bool force)
             {
                 if (Item const* mainhand = _equips[BOT_SLOT_MAINHAND])
                 {
-                    if (mainhand->GetTemplate()->Class == ITEM_CLASS_WEAPON &&
-                        (mainhand->GetTemplate()->SubClass == ITEM_SUBCLASS_WEAPON_DAGGER ||
-                        mainhand->GetTemplate()->SubClass == ITEM_SUBCLASS_WEAPON_FIST))
+                    if (
+                        mainhand->GetTemplate()->GetClass() == ITEM_CLASS_WEAPON &&
+                        (
+                            mainhand->GetTemplate()->GetSubClass() == ITEM_SUBCLASS_WEAPON_DAGGER ||
+                            mainhand->GetTemplate()->GetSubClass() == ITEM_SUBCLASS_WEAPON_FIST_WEAPON
+                        )
+                    )
                         value += 5.f;
                 }
             }
@@ -3277,8 +3283,9 @@ void bot_ai::SetStats(bool force)
     {
         value = 5.0f + (IAmFree() ? mylevel / 8 : 0); // +10%/+0% at 80
 
-        if (GtChanceToMeleeCritEntry  const* dodgeRatio = sGtChanceToMeleeCritStore.LookupEntry((GetPlayerClass()-1)*GT_MAX_LEVEL + mylevel-1))
-            value += _getTotalBotStat(BOT_STAT_MOD_AGILITY) * dodgeRatio->Data * 100.0f;
+        // @todo jh this needs to be updated to use actual dodge from agility
+        // if (GtChanceToMeleeCritEntry  const* dodgeRatio = sGtChanceToMeleeCritStore.LookupEntry((GetPlayerClass()-1)*GT_MAX_LEVEL + mylevel-1))
+        //     value += _getTotalBotStat(BOT_STAT_MOD_AGILITY) * dodgeRatio->Data * 100.0f;
 
         if (mylevel >= 10)
         {
@@ -3410,9 +3417,19 @@ void bot_ai::SetStats(bool force)
                 value += 0.2f * totalSpi;
             //Shadowy Insight (Glyph of Shadow)
             if (mylevel >= 30 &&
-                me->GetAuraEffect(SPELL_AURA_MOD_SPELL_DAMAGE_OF_STAT_PERCENT, SPELLFAMILY_GENERIC, 1499, 0))
+                me->GetAuraEffect(
+                    SPELL_AURA_MOD_SPELL_DAMAGE_OF_STAT_PERCENT,
+                    SPELLFAMILY_GENERIC,
+                    // @todo jh this is likely not the value we want here
+                    1499,
+                    me->GetGUID()
+                )
+            )
+            {
                 value += 0.3f * totalSpi;
+            }
         }
+        
         if (_botclass == BOT_CLASS_SHAMAN && mylevel >= 50 && GetSpec() == BOT_SPEC_SHAMAN_ENHANCEMENT)
         {
             //Mental Quickness - 30% attack power to spell power (only enhancement)
@@ -3438,7 +3455,7 @@ void bot_ai::SetStats(bool force)
         }
         if (_botclass == BOT_CLASS_WARLOCK)
         {
-            if (me->GetAuraEffect(SPELL_AURA_MOD_SPELL_DAMAGE_OF_STAT_PERCENT, SPELLFAMILY_WARLOCK, 0x0, 0x20000000, 0x0))
+            if (me->GetAuraEffect(SPELL_AURA_MOD_SPELL_DAMAGE_OF_STAT_PERCENT, SPELLFAMILY_WARLOCK, 0x20000000, me->GetGUID()))
             {
                 //Fel Armor + Demonic Aegis - 39% Spirit to spell power
                 value += 0.39f * _getTotalBotStat(BOT_STAT_MOD_SPIRIT);
@@ -3447,7 +3464,9 @@ void bot_ai::SetStats(bool force)
             if (botPet && botPet->IsAlive() && mylevel >= 40 && GetSpec() == BOT_SPEC_WARLOCK_DEMONOLOGY)
                 value += 0.12f * botPet->GetStat(STAT_STAMINA) + botPet->GetStat(STAT_INTELLECT);
             //Glyph of Life Tap: 20% of spirit to spellpower
-            if (me->GetAuraEffect(SPELL_AURA_MOD_SPELL_DAMAGE_OF_STAT_PERCENT, SPELLFAMILY_WARLOCK, 208, 0))
+            // @todo jh the 208 in this is likely not correct, in the old code it refers to an iconid
+            // but in the new code it's some sort of familyFlag. See Unit.cpp line 4678 for GetAuraEffect
+            if (me->GetAuraEffect(SPELL_AURA_MOD_SPELL_DAMAGE_OF_STAT_PERCENT, SPELLFAMILY_WARLOCK, 208, me->GetGUID()))
                 value += 0.2f * _getTotalBotStat(BOT_STAT_MOD_SPIRIT);
         }
         if (_botclass == BOT_CLASS_SPHYNX)
@@ -3458,7 +3477,7 @@ void bot_ai::SetStats(bool force)
             //from wands
             for (uint8 i = BOT_SLOT_MAINHAND; i <= BOT_SLOT_OFFHAND; ++i)
                 if (ItemTemplate const* proto = _equips[i] ? _equips[i]->GetTemplate() : nullptr)
-                    value += proto->getDPS() * 1.35f;
+                    value += proto->GetDPS(_equips[i]->GetItemLevel(me)) * 1.35f;
         }
         if (_botclass == BOT_CLASS_ARCHMAGE)
         {
@@ -3597,8 +3616,9 @@ bool bot_ai::IsInBotParty(Unit const* unit) const
         if (me->GetFaction() == 14 || unit->GetFaction() == 14)
             return false;
 
-        if (me->HasByteFlag(UNIT_FIELD_BYTES_2, 1, UNIT_BYTE2_FLAG_FFA_PVP) ||
-            unit->HasByteFlag(UNIT_FIELD_BYTES_2, 1, UNIT_BYTE2_FLAG_FFA_PVP))
+        if (me->HasPvpFlag(UNIT_BYTE2_FLAG_FFA_PVP) ||
+            unit->HasPvpFlag(UNIT_BYTE2_FLAG_FFA_PVP)
+        )
             return false;
 
         return
@@ -3615,31 +3635,48 @@ bool bot_ai::IsInBotParty(Unit const* unit) const
             return true;
         //pointed target case
         for (uint8 i = 0; i != TargetIconNamesCacheSize; ++i)
-            if ((BotMgr::GetHealTargetIconFlags() & GroupIconsFlags[i]) &&
-                !((BotMgr::GetOffTankTargetIconFlags() | BotMgr::GetDPSTargetIconFlags() | BotMgr::GetRangedDPSTargetIconFlags()) & GroupIconsFlags[i]))
-                if (ObjectGuid guid = gr->GetTargetIcons()[i])
+            if ((BotMgr::GetHealTargetIconFlags() & GroupIconsFlags[i])
+                && !(
+                    (
+                        BotMgr::GetOffTankTargetIconFlags() 
+                        | BotMgr::GetDPSTargetIconFlags() 
+                        | BotMgr::GetRangedDPSTargetIconFlags()
+                    ) & GroupIconsFlags[i])
+            )
+            {
+                ObjectGuid guid = gr->GetTargetIcons()[i];
+                if (!guid.IsEmpty())
                     if (guid == unit->GetGUID())
                         return true;
+            }
     }
 
     //Player-controlled creature case
     if (Creature const* cre = unit->ToCreature())
     {
-        ObjectGuid ownerGuid = unit->GetOwnerGUID() ? unit->GetOwnerGUID() : unit->GetCreator() ? unit->GetCreator()->GetGUID() : ObjectGuid::Empty;
+        ObjectGuid ownerGuid = unit->GetOwnerGUID().IsPlayer() 
+            ? unit->GetOwnerGUID() : unit->GetCreatorGUID().IsPlayer() 
+                ? unit->GetCreatorGUID() : ObjectGuid::Empty;
+
+        // if we are in a vehicle get the vehicle driver/owner
         if (!ownerGuid && unit->IsVehicle())
             ownerGuid = unit->GetCharmerGUID();
+
         //controlled by master
         if (ownerGuid == master->GetGUID())
             return true;
+
         //npcbot/npcbot's pet case
         if (cre->GetBotOwner() == master)
             return true;
-        if (ownerGuid && master->GetBotMgr()->GetBot(ownerGuid))
+
+        if (ownerGuid.IsPlayer() && master->GetBotMgr()->GetBot(ownerGuid))
             return true;
+
         //controlled by group member
         //pets, minions, guardians etc.
         //bot pets too
-        if (ownerGuid)
+        if (ownerGuid.IsCreature())
             if (Group const* gr = master->GetGroup())
                 if (gr->IsMember(ownerGuid))
                     return true;
@@ -3657,7 +3694,7 @@ bool bot_ai::IsInBotParty(ObjectGuid guid) const
 
     if (IAmFree())
     {
-        if (me->HasByteFlag(UNIT_FIELD_BYTES_2, 1, UNIT_BYTE2_FLAG_FFA_PVP))
+        if (me->HasPvpFlag(UNIT_BYTE2_FLAG_FFA_PVP))
             return false;
 
         return !(me->GetVictim() && me->GetVictim()->GetGUID() == guid);
@@ -3671,11 +3708,22 @@ bool bot_ai::IsInBotParty(ObjectGuid guid) const
             return true;
         //pointed target case
         for (uint8 i = 0; i != TargetIconNamesCacheSize; ++i)
-            if ((BotMgr::GetHealTargetIconFlags() & GroupIconsFlags[i]) &&
-                !((BotMgr::GetOffTankTargetIconFlags() | BotMgr::GetDPSTargetIconFlags()) & GroupIconsFlags[i]))
-                if (ObjectGuid gguid = gr->GetTargetIcons()[i])
+            if (
+                (
+                    BotMgr::GetHealTargetIconFlags() & GroupIconsFlags[i]
+                ) && !(
+                    (
+                        BotMgr::GetOffTankTargetIconFlags() | BotMgr::GetDPSTargetIconFlags()
+                    )
+                    & GroupIconsFlags[i]
+                )
+            )
+            {
+                ObjectGuid gguid = gr->GetTargetIcons()[i];
+                if (!gguid.IsEmpty())
                     if (gguid == guid)
                         return true;
+            }
 
         for (GroupReference const* ref = gr->GetFirstMember(); ref != nullptr; ref = ref->next())
         {
@@ -3722,7 +3770,7 @@ void bot_ai::RefreshAura(uint32 spellId, int8 count, Unit* target) const
         return;
     }
 
-    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, me->ToUnit()->GetMap()->GetDifficultyID());
     if (!spellInfo)
     {
         TC_LOG_ERROR("entities.player", "bot_ai::RefreshAura(): Invalid spellInfo for spell {}! Bot - {} (botclass: {}, entry: {})",
@@ -3855,7 +3903,8 @@ Unit* bot_ai::_getVehicleTarget(BotVehicleStrats /*strat*/) const
         {
             if (BotMgr::GetOffTankTargetIconFlags() & GroupIconsFlags[i])
             {
-                if (ObjectGuid guid = gr->GetTargetIcons()[i])
+                ObjectGuid guid = gr->GetTargetIcons()[i];
+                if (!guid.IsEmpty())
                 {
                     if (mytar && mytar->GetGUID() == guid && mytar->GetVictim() == veh)
                         return mytar;
@@ -3885,7 +3934,8 @@ Unit* bot_ai::_getVehicleTarget(BotVehicleStrats /*strat*/) const
     {
         for (int8 i = TargetIconNamesCacheSize - 1; i >= 0; --i)
         {
-            if (ObjectGuid guid = gr->GetTargetIcons()[i])
+            ObjectGuid guid = gr->GetTargetIcons()[i];
+            if (!guid.IsEmpty())
             {
                 if ((HasRole(BOT_ROLE_RANGED)|| HasVehicleRoleOverride(BOT_ROLE_RANGED)) &&
                     (BotMgr::GetRangedDPSTargetIconFlags() & GroupIconsFlags[i]))
@@ -3923,7 +3973,7 @@ Unit* bot_ai::_getVehicleTarget(BotVehicleStrats /*strat*/) const
     if (float distOverride = GetVehicleAttackDistanceOverride())
         followdist = distOverride * 2.f;
     if (mytar && mytar->GetTypeId() == TYPEID_UNIT &&
-        mytar->ToCreature()->GetCreatureTemplate()->rank == CREATURE_ELITE_WORLDBOSS)
+        mytar->ToCreature()->GetCreatureTemplate()->Classification == CreatureClassifications::Elite)
         followdist *= 1.5f;
     else if (mmover->isMoving() && veh->GetMapId() == 578) //oculus
         followdist *= 0.5f;
@@ -4147,7 +4197,8 @@ std::tuple<Unit*, Unit*> bot_ai::_getTargets(bool byspell, bool ranged, bool &re
     {
         if (_primaryIconTank >= 0 && BotMgr::GetOffTankTargetIconFlags() & (1u << _primaryIconTank))
         {
-            if (ObjectGuid guid = gr->GetTargetIcons()[_primaryIconTank])
+            ObjectGuid guid = gr->GetTargetIcons()[_primaryIconTank];
+            if (!guid.IsEmpty())
             {
                 if (mytar && mytar->GetGUID() == guid)
                     return { mytar, mytar };
@@ -4171,7 +4222,8 @@ std::tuple<Unit*, Unit*> bot_ai::_getTargets(bool byspell, bool ranged, bool &re
 
             if (BotMgr::GetOffTankTargetIconFlags() & GroupIconsFlags[i])
             {
-                if (ObjectGuid guid = gr->GetTargetIcons()[i])
+                ObjectGuid guid = gr->GetTargetIcons()[i];
+                if (!guid.IsEmpty())
                 {
                     if (mytar && mytar->GetGUID() == guid && mytar->GetVictim() == me)
                     {
@@ -4209,7 +4261,8 @@ std::tuple<Unit*, Unit*> bot_ai::_getTargets(bool byspell, bool ranged, bool &re
     {
         if (_primaryIconTank >= 0 && BotMgr::GetTankTargetIconFlags() & (1u << _primaryIconTank))
         {
-            if (ObjectGuid guid = gr->GetTargetIcons()[_primaryIconTank])
+            ObjectGuid guid = gr->GetTargetIcons()[_primaryIconTank];
+            if (!guid.IsEmpty())
             {
                 if (mytar && mytar->GetGUID() == guid)
                     return { mytar, mytar };
@@ -4233,7 +4286,8 @@ std::tuple<Unit*, Unit*> bot_ai::_getTargets(bool byspell, bool ranged, bool &re
 
             if (BotMgr::GetTankTargetIconFlags() & GroupIconsFlags[i])
             {
-                if (ObjectGuid guid = gr->GetTargetIcons()[i])
+                ObjectGuid guid = gr->GetTargetIcons()[i];
+                if (!guid.IsEmpty())
                 {
                     if (mytar && mytar->GetGUID() == guid && mytar->GetVictim() == me)
                     {
@@ -4243,8 +4297,18 @@ std::tuple<Unit*, Unit*> bot_ai::_getTargets(bool byspell, bool ranged, bool &re
 
                     if (Unit* unit = ObjectAccessor::GetUnit(*me, guid))
                     {
-                        if (unit->IsVisible() && unit->isTargetableForAttack(false) && me->IsValidAttackTarget(unit) &&
-                            unit->IsInCombat() && (CanSeeEveryone() || (me->CanSeeOrDetect(unit) && unit->InSamePhase(me))))
+                        if (
+                            unit->IsVisible()
+                            && unit->isTargetableForAttack(false)
+                            && me->IsValidAttackTarget(unit)
+                            && unit->IsInCombat()
+                            && (
+                                CanSeeEveryone()
+                                || (
+                                       me->CanSeeOrDetect(unit) && unit->InSamePhase(me)
+                                    )
+                                )
+                            )
                         {
                             //TC_LOG_ERROR("entities.unit", "_getTarget: {} found new mtanking icon target {}", me->GetName(), unit->GetName());
                             Unit* tempTar = tankTar ? tankTar : unit;
@@ -4276,7 +4340,8 @@ std::tuple<Unit*, Unit*> bot_ai::_getTargets(bool byspell, bool ranged, bool &re
                 iconMask |= BotMgr::GetRangedDPSTargetIconFlags();
             if (iconMask & (1u << _primaryIconDamage))
             {
-                if (ObjectGuid guid = gr->GetTargetIcons()[_primaryIconDamage])
+                ObjectGuid guid = gr->GetTargetIcons()[_primaryIconDamage];
+                if (!guid.IsEmpty())
                 {
                     if (mytar && mytar->GetGUID() == guid)
                         return { mytar, mytar };
@@ -4297,8 +4362,8 @@ std::tuple<Unit*, Unit*> bot_ai::_getTargets(bool byspell, bool ranged, bool &re
         {
             if (i == _primaryIconDamage)
                 continue;
-
-            if (ObjectGuid guid = gr->GetTargetIcons()[i])
+            ObjectGuid guid = gr->GetTargetIcons()[i];
+            if (!guid.IsEmpty())
             {
                 if (HasRole(BOT_ROLE_RANGED) && (BotMgr::GetRangedDPSTargetIconFlags() & GroupIconsFlags[i]))
                 {
@@ -4527,9 +4592,9 @@ std::tuple<Unit*, Unit*> bot_ai::_getTargets(bool byspell, bool ranged, bool &re
                     }
                     else
                     {
-                        if (me->GetLevel() + (unit->ToCreature()->isElite() ? 3 : 6) < unit->GetLevel())
+                        if (me->GetLevel() + (unit->ToCreature()->IsElite() ? 3 : 6) < unit->GetLevel())
                             return true;
-                        if (unit->GetLevel() + (unit->ToCreature()->isElite() ? 8 : 4) < me->GetLevel())
+                        if (unit->GetLevel() + (unit->ToCreature()->IsElite() ? 8 : 4) < me->GetLevel())
                             return true;
                         if (unit->IsCritter())
                             return true;
@@ -4689,8 +4754,13 @@ bool bot_ai::CheckAttackTarget()
     //boss engage phase // CanHaveThreatList checks for typeid == UNIT
     if (GetEngageTimer() > lastdiff)
         return false;
-    else if (!IsTank() && mytar != me->GetVictim() && mytar->GetVictim() && mytar->CanHaveThreatList() &&
-        mytar->ToCreature()->GetCreatureTemplate()->rank == CREATURE_ELITE_WORLDBOSS && me->GetMap()->IsRaid())
+    else if (
+        !IsTank() 
+        && mytar != me->GetVictim() 
+        && mytar->GetVictim() 
+        && mytar->CanHaveThreatList() 
+        && mytar->ToCreature()->isWorldBoss()
+        && me->GetMap()->IsRaid())
     {
         uint32 threat = uint32(mytar->ToCreature()->GetThreatManager().GetThreat(mytar->GetVictim()));
         if (threat < std::min<uint32>(50000, mytar->GetVictim()->GetMaxHealth() / 2))

@@ -2276,6 +2276,22 @@ uint32 Item::GetSellPrice(ItemTemplate const* proto, uint32 quality, uint32 item
     return 0;
 }
 
+//npcbot
+uint32 Item::GetItemLevel(Creature const* owner) const
+{
+    ItemTemplate const* itemTemplate = GetTemplate();
+    uint32 minItemLevel = owner->m_unitData->MinItemLevel;
+    uint32 minItemLevelCutoff = owner->m_unitData->MinItemLevelCutoff;
+    uint32 maxItemLevel = itemTemplate->HasFlag(ITEM_FLAG3_IGNORE_ITEM_LEVEL_CAP_IN_PVP) ? 0 : owner->m_unitData->MaxItemLevel;
+    bool pvpBonus = owner->IsUsingPvpItemLevels();
+    uint32 azeriteLevel = 0;
+    if (AzeriteItem const* azeriteItem = ToAzeriteItem())
+        azeriteLevel = azeriteItem->GetEffectiveLevel();
+    return Item::GetItemLevel(itemTemplate, _bonusData, owner->GetLevel(), GetModifier(ITEM_MODIFIER_TIMEWALKER_LEVEL),
+        minItemLevel, minItemLevelCutoff, maxItemLevel, pvpBonus, azeriteLevel);
+}
+//end npcbot
+
 uint32 Item::GetItemLevel(Player const* owner) const
 {
     ItemTemplate const* itemTemplate = GetTemplate();

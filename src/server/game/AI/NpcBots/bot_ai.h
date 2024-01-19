@@ -93,7 +93,7 @@ class bot_ai : public CreatureAI
 
         static Position GetAbsoluteTransportPosition(WorldObject const* object);
 
-        static const std::string& LocalizedNpcText(Player const* forPlayer, uint32 textId);
+        static const std::string LocalizedNpcText(Player const* forPlayer, uint32 textId);
 
         bool OnGossipHello(Player* player, uint32 option);
         bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action);
