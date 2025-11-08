@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # MySQL Database Server
+  mysql:
+    image: mysql:8.0
+    container_name: trinitycore-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-trinity}
+      MYSQL_DATABASE: ${MYSQL_AUTH_DATABASE:-auth}
+      MYSQL_USER: ${MYSQL_USER:-trinity}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-trinity}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "3306:3306"
+    networks:
+      - trinitycore
+    command: --default-authentication-plugin=mysql_native_password --max_allowed_packet=512M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-trinity}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TrinityCore Auth Server (bnetserver)
+  authserver:
+    image: ${IMAGE_REGISTRY:-}${IMAGE_REGISTRY:+/}${IMAGE_NAME:-trinitycore}:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: trinitycore-authserver
+    entrypoint: ["/opt/trinitycore/bin/authserver"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./etc:/opt/trinitycore/etc:ro
+      - ./logs:/opt/trinitycore/logs
+    ports:
+      - "1119:1119"
+      - "3724:3724"
+    networks:
+      - trinitycore
+    restart: unless-stopped
+    # Uncomment to override entrypoint for debugging
+    # entrypoint: ["/bin/bash"]
+    # stdin_open: true
+    # tty: true
+
+  # TrinityCore World Server
+  worldserver:
+    image: ${IMAGE_REGISTRY:-}${IMAGE_REGISTRY:+/}${IMAGE_NAME:-trinitycore}:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: trinitycore-worldserver
+    entrypoint: ["/opt/trinitycore/bin/worldserver"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      authserver:
+        condition: service_started
+    volumes:
+      - ./etc:/opt/trinitycore/etc:ro
+      - ./data:/opt/trinitycore/data:ro
+      - ./logs:/opt/trinitycore/logs
+    ports:
+      - "8085:8085"
+      - "7878:7878"
+    networks:
+      - trinitycore
+    restart: unless-stopped
+    # Uncomment to override entrypoint for debugging
+    # entrypoint: ["/bin/bash"]
+    # stdin_open: true
+    # tty: true
+
+networks:
+  trinitycore:
+    driver: bridge
+
+volumes:
+  mysql-data:
+    driver: local

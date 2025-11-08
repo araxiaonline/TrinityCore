@@ -13,6 +13,11 @@ CollectSourceFiles(
   TEST_SOURCES
 )
 
+# Include Eluna/LuaEngine tests if available
+if(ELUNA)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/game/LuaEngine/CMakeLists.txt)
+endif()
+
 GroupSources(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(tests ${TEST_SOURCES})
@@ -21,7 +26,8 @@ target_link_libraries(tests
   PRIVATE
     trinity-core-interface
     game
-    Catch2::Catch2)
+    Catch2::Catch2
+    lualib)
 
 CollectIncludeDirectories(
   ${CMAKE_CURRENT_SOURCE_DIR}

@@ -1,4 +1,4 @@
-if (BUILD_SHARED_LIBS)
+if (NOT BUILD_SHARED_LIBS)
   set(EFSW_CPP_SOURCE
     src/efsw/Atomic.hpp
     src/efsw/base.hpp

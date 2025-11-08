@@ -20,6 +20,9 @@
 */
 
 #include "World.h"
+#include "LuaEngine/LuaEngine.h"
+#include "LuaEngine/ElunaMgr.h"
+#include "LuaEngine/ElunaConfig.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AreaTriggerDataStore.h"
@@ -170,6 +173,13 @@ World::World()
     _guidAlert = false;
     _warnDiff = 0;
     _warnShutdownTime = GameTime::GetGameTime();
+}
+
+Eluna* World::GetEluna() const
+{
+    if (_elunaInfo)
+        return _elunaInfo->GetEluna();
+    return nullptr;
 }
 
 /// World destructor
@@ -2078,6 +2088,14 @@ bool World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading phase names...");
     sObjectMgr->LoadPhaseNames();
+
+    ///- Initialize Eluna world state
+    if (sElunaConfig->IsElunaEnabled())
+    {
+        TC_LOG_INFO("server.loading", "Starting Eluna world state...");
+        _elunaInfo = std::make_unique<ElunaInfo>(ElunaInfoKey::MakeGlobalKey(0));
+        sElunaMgr->Create(nullptr, *_elunaInfo);
+    }
 
     uint32 startupDuration = GetMSTimeDiffToNow(startupBegin);
 

@@ -43,6 +43,8 @@ class Player;
 class WorldPacket;
 class WorldSession;
 class WorldSocket;
+class Eluna;
+struct ElunaInfo;
 enum class GameRule : int32;
 
 // ServerMessages.dbc
@@ -799,6 +801,9 @@ class TC_GAME_API World
             return _gameRules;
         }
 
+        // Eluna LuaEngine support - global Eluna state
+        Eluna* GetEluna() const;
+
     protected:
         void _UpdateGameTime();
 
@@ -864,6 +869,9 @@ class TC_GAME_API World
 
         // CLI command holder to be thread safe
         LockedQueue<CliCommandHolder*> cliCmdQueue;
+
+        // Eluna LuaEngine support
+        std::unique_ptr<ElunaInfo> _elunaInfo;
 
         // scheduled reset times
         time_t m_NextDailyQuestReset;

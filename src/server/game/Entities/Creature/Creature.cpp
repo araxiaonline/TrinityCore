@@ -3947,6 +3947,11 @@ void Creature::ValuesUpdateForPlayerWithMaskSender::operator()(Player const* pla
     player->SendDirectMessage(&packet);
 }
 
+Eluna* Creature::GetEluna() const
+{
+    return GetMap()->GetEluna();
+}
+
 void Creature::ClearUpdateMask(bool remove)
 {
     m_values.ClearChangesMask(&Creature::m_vendorData);

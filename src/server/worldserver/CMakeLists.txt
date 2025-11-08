@@ -40,6 +40,7 @@ endif()
 target_link_libraries(worldserver
   PRIVATE
     trinity-core-interface
+    efsw
   PUBLIC
     scripts
     game

@@ -33,6 +33,7 @@ class Quest;
 class Player;
 class SpellInfo;
 class WorldSession;
+class Eluna;
 struct Loot;
 
 enum MovementGeneratorType : uint8;
@@ -490,6 +491,9 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void SetInteractSpellId(int32 interactSpellId) { SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::InteractSpellID), interactSpellId); }
 
         UF::OptionalUpdateField<UF::VendorData, int32(WowCS::EntityFragment::FVendor_C), 0> m_vendorData;
+
+        // Eluna LuaEngine support
+        Eluna* GetEluna() const;
 
     protected:
         void BuildValuesCreate(ByteBuffer* data, UF::UpdateFieldFlag flags, Player const* target) const override;

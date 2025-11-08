@@ -41,6 +41,7 @@ void AddSC_learn_commandscript();
 void AddSC_lfg_commandscript();
 void AddSC_list_commandscript();
 void AddSC_lookup_commandscript();
+void AddSC_lua_commandscript();
 void AddSC_message_commandscript();
 void AddSC_misc_commandscript();
 void AddSC_mmaps_commandscript();
@@ -88,6 +89,7 @@ void AddCommandsScripts()
     AddSC_lookup_commandscript();
     AddSC_lfg_commandscript();
     AddSC_list_commandscript();
+    AddSC_lua_commandscript();
     AddSC_message_commandscript();
     AddSC_misc_commandscript();
     AddSC_mmaps_commandscript();

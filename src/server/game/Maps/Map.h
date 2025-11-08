@@ -49,6 +49,7 @@ class Battleground;
 class BattlegroundMap;
 class BattlegroundScript;
 class CreatureGroup;
+class Eluna;
 class GameObjectModel;
 class Group;
 class InstanceLock;
@@ -65,6 +66,7 @@ class Unit;
 class Weather;
 class WorldObject;
 class WorldPacket;
+struct ElunaInfo;
 struct DungeonEncounterEntry;
 struct MapDifficultyEntry;
 struct MapEntry;
@@ -755,7 +757,12 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         void InitSpawnGroupState();
         void UpdateSpawnGroupConditions();
 
+        // Eluna LuaEngine support
+        Eluna* GetEluna() const;
+
     private:
+        ElunaInfo* _elunaInfo = nullptr;
+        void* _luaData = nullptr;
         // Type specific code for add/remove to/from grid
         template<class T>
         void AddToGrid(T* object, Cell const& cell);

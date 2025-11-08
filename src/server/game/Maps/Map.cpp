@@ -20,6 +20,10 @@
 #include "BattlegroundMgr.h"
 #include "BattlegroundScript.h"
 #include "CellImpl.h"
+#include "LuaEngine/LuaEngine.h"
+#include "LuaEngine/ElunaMgr.h"
+#include "LuaEngine/LuaValue.h"
+#include "LuaEngine/ElunaConfig.h"
 #include "CharacterPackets.h"
 #include "Conversation.h"
 #include "DB2Stores.h"
@@ -155,6 +159,14 @@ i_scriptLock(false), _respawnTimes(std::make_unique<RespawnListContainer>()), _r
     m_terrain->LoadMMapInstance(GetId(), GetInstanceId());
 
     _worldStateValues = sWorldStateMgr->GetInitialWorldStatesForMap(this);
+
+    // Initialize Eluna for this map
+    if (sElunaConfig->IsElunaEnabled() && sElunaConfig->ShouldMapLoadEluna(id))
+    {
+        _elunaInfo = new ElunaInfo(ElunaInfoKey::MakeKey(GetId(), GetInstanceId()));
+        _luaData = new LuaVal({});
+        sElunaMgr->Create(this, *_elunaInfo);
+    }
 }
 
 void Map::InitVisibilityDistance()
@@ -4054,6 +4066,13 @@ void Map::UpdateAreaDependentAuras()
             }
         }
     }
+}
+
+Eluna* Map::GetEluna() const
+{
+    if (_elunaInfo)
+        return _elunaInfo->GetEluna();
+    return nullptr;
 }
 
 std::string Map::GetDebugInfo() const

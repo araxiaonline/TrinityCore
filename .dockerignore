@@ -1,0 +1,79 @@
+# Docker ignore file for TrinityCore builds
+# Exclude unnecessary files to speed up docker build context
+
+# Build directories
+build/
+bin/
+obj/
+*.o
+*.a
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Documentation that's not needed in the build
+*.md
+!README.md
+doc/
+docs/
+
+# Test files
+test/
+tests/
+
+# CI/CD files
+.github/
+.circleci/
+.gitlab-ci.yml
+appveyor.yml
+
+# Docker files (don't need these in the build context recursively)
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Archive files
+*.tar
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# Database dumps
+*.sql.gz
+*.sql.tar.gz
+
+# Configuration files (these should be mounted, not baked in)
+*.conf
+!*.conf.dist
+
+# Client data (should be mounted separately)
+dbc/
+maps/
+mmaps/
+vmaps/
+Buildings/
+Cameras/
+
+# Backup files
+*.bak
+*.backup
