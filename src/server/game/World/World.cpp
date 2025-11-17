@@ -23,6 +23,7 @@
 #include "LuaEngine/LuaEngine.h"
 #include "LuaEngine/ElunaMgr.h"
 #include "LuaEngine/ElunaConfig.h"
+#include "LuaEngine/ElunaLoader.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AreaTriggerDataStore.h"
@@ -1263,6 +1264,13 @@ bool World::SetInitialWorldSettings()
 
     ///- Initialize config settings
     LoadConfigSettings();
+
+    ///- Initialize Eluna configuration and loader
+    TC_LOG_INFO("server.loading", "Initializing Eluna...");
+    sElunaConfig->Initialize();
+    TC_LOG_INFO("server.loading", "Loading Eluna scripts...");
+    sElunaLoader->LoadScripts();
+    TC_LOG_INFO("server.loading", "Eluna initialization complete");
 
     ///- Initialize Allowed Security Level
     LoadDBAllowedSecurityLevel();

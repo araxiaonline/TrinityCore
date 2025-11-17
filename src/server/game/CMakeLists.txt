@@ -46,7 +46,7 @@ target_include_directories(lualib INTERFACE
   /usr/include/luajit-2.1
   ${CMAKE_SOURCE_DIR}/dep/efsw/include)
 target_link_libraries(lualib INTERFACE luajit-5.1 efsw)
-target_compile_definitions(lualib INTERFACE LUAJIT_VERSION ELUNA_TRINITY ELUNA_EXPANSION=9)
+target_compile_definitions(lualib INTERFACE ELUNA LUAJIT_VERSION ELUNA_TRINITY ELUNA_EXPANSION=9)
 
 add_library(game
   ${PRIVATE_SOURCES})

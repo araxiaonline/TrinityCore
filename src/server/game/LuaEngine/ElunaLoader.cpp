@@ -106,12 +106,18 @@ void ElunaLoader::ReloadScriptCache()
 
 void ElunaLoader::LoadScripts()
 {
+    ELUNA_LOG_INFO("[Eluna]: LoadScripts() called, current cache state: %u", uint32(m_cacheState));
+    
     // only reload the cache if it is either in a reinit state or not loaded at all
     if (m_cacheState != SCRIPT_CACHE_REINIT && m_cacheState != SCRIPT_CACHE_NONE)
+    {
+        ELUNA_LOG_DEBUG("[Eluna]: Script cache is in state %u, skipping load", uint32(m_cacheState));
         return;
+    }
 
     // set the cache state to loading
     m_cacheState = SCRIPT_CACHE_LOADING;
+    ELUNA_LOG_DEBUG("[Eluna]: Script cache state set to LOADING");
 
     uint32 oldMSTime = ElunaUtil::GetCurrTime();
 
@@ -162,6 +168,7 @@ void ElunaLoader::LoadScripts()
 
     // set the cache state to ready
     m_cacheState = SCRIPT_CACHE_READY;
+    ELUNA_LOG_INFO("[Eluna]: Script cache state set to READY");
 }
 
 int ElunaLoader::LoadBytecodeChunk(lua_State* /*L*/, uint8* bytes, size_t len, BytecodeBuffer* buffer)

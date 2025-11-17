@@ -31,25 +31,42 @@ ElunaConfig::~ElunaConfig()
 
 void ElunaConfig::Initialize()
 {
+    ELUNA_LOG_INFO("[Eluna]: Initializing Eluna configuration...");
+    
     // Load bools
     SetConfig(CONFIG_ELUNA_ENABLED, "Eluna.Enabled", true);
+    ELUNA_LOG_DEBUG("[Eluna]: CONFIG_ELUNA_ENABLED = %s", GetConfig(CONFIG_ELUNA_ENABLED) ? "true" : "false");
+    
     SetConfig(CONFIG_ELUNA_TRACEBACK, "Eluna.TraceBack", false);
+    ELUNA_LOG_DEBUG("[Eluna]: CONFIG_ELUNA_TRACEBACK = %s", GetConfig(CONFIG_ELUNA_TRACEBACK) ? "true" : "false");
+    
     SetConfig(CONFIG_ELUNA_SCRIPT_RELOADER, "Eluna.ScriptReloader", false);
+    ELUNA_LOG_DEBUG("[Eluna]: CONFIG_ELUNA_SCRIPT_RELOADER = %s", GetConfig(CONFIG_ELUNA_SCRIPT_RELOADER) ? "true" : "false");
+    
     SetConfig(CONFIG_ELUNA_ENABLE_UNSAFE, "Eluna.UseUnsafeMethods", true);
+    ELUNA_LOG_DEBUG("[Eluna]: CONFIG_ELUNA_ENABLE_UNSAFE = %s", GetConfig(CONFIG_ELUNA_ENABLE_UNSAFE) ? "true" : "false");
+    
     SetConfig(CONFIG_ELUNA_ENABLE_DEPRECATED, "Eluna.UseDeprecatedMethods", true);
+    ELUNA_LOG_DEBUG("[Eluna]: CONFIG_ELUNA_ENABLE_DEPRECATED = %s", GetConfig(CONFIG_ELUNA_ENABLE_DEPRECATED) ? "true" : "false");
+    
     SetConfig(CONFIG_ELUNA_ENABLE_RELOAD_COMMAND, "Eluna.ReloadCommand", true);
+    ELUNA_LOG_DEBUG("[Eluna]: CONFIG_ELUNA_ENABLE_RELOAD_COMMAND = %s", GetConfig(CONFIG_ELUNA_ENABLE_RELOAD_COMMAND) ? "true" : "false");
 
     // Load strings
     SetConfig(CONFIG_ELUNA_SCRIPT_PATH, "Eluna.ScriptPath", "lua_scripts");
+    ELUNA_LOG_DEBUG("[Eluna]: CONFIG_ELUNA_SCRIPT_PATH = %s", GetConfig(CONFIG_ELUNA_SCRIPT_PATH).c_str());
+    
     SetConfig(CONFIG_ELUNA_ONLY_ON_MAPS, "Eluna.OnlyOnMaps", "");
     SetConfig(CONFIG_ELUNA_REQUIRE_PATH_EXTRA, "Eluna.RequirePaths", "");
     SetConfig(CONFIG_ELUNA_REQUIRE_CPATH_EXTRA, "Eluna.RequireCPaths", "");
 
     // Load ints
     SetConfig(CONFIG_ELUNA_RELOAD_SECURITY_LEVEL, "Eluna.ReloadSecurityLevel", 3);
+    ELUNA_LOG_DEBUG("[Eluna]: CONFIG_ELUNA_RELOAD_SECURITY_LEVEL = %u", GetConfig(CONFIG_ELUNA_RELOAD_SECURITY_LEVEL));
 
     // Call extra functions
     TokenizeAllowedMaps();
+    ELUNA_LOG_INFO("[Eluna]: Eluna configuration initialized successfully");
 }
 
 void ElunaConfig::SetConfig(ElunaConfigBoolValues index, char const* fieldname, bool defvalue)

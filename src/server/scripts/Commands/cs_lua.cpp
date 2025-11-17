@@ -31,6 +31,7 @@ EndScriptData */
 #ifdef ELUNA
 #include "LuaEngine.h"
 #include "ElunaMgr.h"
+#include "ElunaConfig.h"
 #endif
 
 using namespace Trinity::ChatCommands;
@@ -53,16 +54,23 @@ private:
     static bool HandleLuaCommand(ChatHandler* handler, char const* args)
     {
 #ifdef ELUNA
+        // Check if Eluna is enabled at runtime
+        if (!sElunaConfig->IsElunaEnabled())
+        {
+            handler->SendSysMessage("Eluna is not enabled on this server.");
+            return false;
+        }
+
         if (!*args)
         {
             handler->SendSysMessage("Usage: .lua <code>");
             return false;
         }
 
-        // Get the global Eluna instance
+        // Get the global Eluna instance directly from ElunaMgr
+        // Note: We don't use ElunaInfo here because its destructor would destroy the instance
         ElunaInfoKey key = ElunaInfoKey::MakeGlobalKey(0);
-        ElunaInfo info(key);
-        Eluna* eluna = info.GetEluna();
+        Eluna* eluna = sElunaMgr->Get(key);
 
         if (!eluna || !eluna->HasLuaState())
         {

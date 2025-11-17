@@ -211,10 +211,14 @@ add_library(scripts STATIC
 target_link_libraries(scripts
   PRIVATE
     trinity-core-interface
+    game
+    lualib
   PUBLIC
     game-interface)
 
 target_include_directories(scripts
+  PRIVATE
+    /usr/include/luajit-2.1
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
 
