@@ -38,18 +38,28 @@ EndScriptData */
 #include "ItemEnchantmentMgr.h"
 #include "Language.h"
 #include "LFGMgr.h"
-#include "Log.h"
 #include "LootMgr.h"
 #include "MapManager.h"
 #include "ObjectMgr.h"
+#include "Player.h"
+#include "QuestPools.h"
+#include "SceneMgr.h"
 #include "SkillDiscovery.h"
 #include "SkillExtraItems.h"
 #include "SmartAI.h"
 #include "SpellMgr.h"
-#include "StringConvert.h"
 #include "SupportMgr.h"
+#include "VehicleDefines.h"
+#include "WardenCheckMgr.h"
 #include "WaypointManager.h"
 #include "World.h"
+
+#ifdef ELUNA
+#include "LuaEngine.h"
+#include "ElunaMgr.h"
+#include "ElunaConfig.h"
+#include "ElunaLoader.h"
+#endif
 
 #if TRINITY_COMPILER == TRINITY_COMPILER_GNU
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -104,6 +114,7 @@ public:
             { "criteria_data",                 rbac::RBAC_PERM_COMMAND_RELOAD_CRITERIA_DATA,                    true,  &HandleReloadCriteriaDataCommand,               "" },
             { "disables",                      rbac::RBAC_PERM_COMMAND_RELOAD_DISABLES,                         true,  &HandleReloadDisablesCommand,                   "" },
             { "disenchant_loot_template",      rbac::RBAC_PERM_COMMAND_RELOAD_DISENCHANT_LOOT_TEMPLATE,         true,  &HandleReloadLootTemplatesDisenchantCommand,    "" },
+            { "eluna",                         rbac::RBAC_PERM_COMMAND_RELOAD,                                  true,  &HandleReloadElunaCommand,                      "" },
             { "event_scripts",                 rbac::RBAC_PERM_COMMAND_RELOAD_EVENT_SCRIPTS,                    true,  &HandleReloadEventScriptsCommand,               "" },
             { "fishing_loot_template",         rbac::RBAC_PERM_COMMAND_RELOAD_FISHING_LOOT_TEMPLATE,            true,  &HandleReloadLootTemplatesFishingCommand,       "" },
             { "graveyard_zone",                rbac::RBAC_PERM_COMMAND_RELOAD_GRAVEYARD_ZONE,                   true,  &HandleReloadGameGraveyardZoneCommand,          "" },
@@ -176,6 +187,48 @@ public:
     }
 
     //reload commands
+    static bool HandleReloadElunaCommand(ChatHandler* handler, char const* /*args*/)
+    {
+#ifdef ELUNA
+        // Check if Eluna is enabled at runtime
+        if (!sElunaConfig->IsElunaEnabled())
+        {
+            handler->SendSysMessage("Eluna is not enabled on this server.");
+            return false;
+        }
+
+        // Check if reload command is enabled in config
+        if (!sElunaConfig->IsReloadCommandEnabled())
+        {
+            handler->SendSysMessage("Eluna reload command is disabled in configuration.");
+            return false;
+        }
+
+        // Check security level
+        if (handler->GetSession())
+        {
+            AccountTypes secLevel = handler->GetSession()->GetSecurity();
+            if (secLevel < sElunaConfig->GetReloadSecurityLevel())
+            {
+                handler->SendSysMessage("You don't have permission to reload Eluna scripts.");
+                return false;
+            }
+        }
+
+        TC_LOG_INFO("misc", "Re-Loading Eluna scripts...");
+        handler->SendSysMessage("Reloading Eluna scripts...");
+        
+        // Reload global state (RELOAD_GLOBAL_STATE = -1)
+        sElunaLoader->ReloadElunaForMap(RELOAD_GLOBAL_STATE);
+        
+        handler->SendGlobalGMSysMessage("Eluna scripts reloaded.");
+        return true;
+#else
+        handler->SendSysMessage("Eluna is not enabled on this server.");
+        return false;
+#endif
+    }
+
     static bool HandleReloadSupportSystemCommand(ChatHandler* handler, char const* /*args*/)
     {
         TC_LOG_INFO("misc", "Re-Loading Support System Tables...");

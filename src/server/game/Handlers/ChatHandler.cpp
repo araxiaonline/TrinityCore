@@ -41,6 +41,9 @@
 #include "Util.h"
 #include "Warden.h"
 #include "World.h"
+#ifdef ELUNA
+#include "LuaEngine/LuaEngine.h"
+#endif
 #include <algorithm>
 
 enum class ChatWhisperTargetStatus : uint8
@@ -507,8 +510,20 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
 {
     Player* sender = GetPlayer();
 
+    // AMS DEBUG: Log all addon messages received
+    TC_LOG_DEBUG("ams.debug", "=== ADDON MESSAGE RECEIVED ===");
+    TC_LOG_DEBUG("ams.debug", "Prefix: '{}', MessageLen: {}, Type: {}, IsLogged: {}", 
+                prefix, text.length(), uint32(type), isLogged);
+    TC_LOG_DEBUG("ams.debug", "Sender: {}, Target: '{}'", 
+                sender ? sender->GetName() : "NULL", target);
+    TC_LOG_DEBUG("ams.debug", "Message preview: '{}'", 
+                text.length() > 50 ? text.substr(0, 50) + "..." : text);
+
     if (prefix.empty() || prefix.length() > 16)
+    {
+        TC_LOG_DEBUG("ams.debug", "REJECTED: Invalid prefix length ({})", prefix.length());
         return;
+    }
 
     // Our Warden module also uses SendAddonMessage as a way to communicate Lua check results to the server, see if this is that
     if (type == CHAT_MSG_GUILD)
@@ -519,10 +534,16 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
 
     // Disabled addon channel?
     if (!sWorld->getBoolConfig(CONFIG_ADDON_CHANNEL))
+    {
+        TC_LOG_DEBUG("ams.debug", "REJECTED: Addon channel disabled in config");
         return;
+    }
 
     if (!CanSpeak())
+    {
+        TC_LOG_DEBUG("ams.debug", "REJECTED: Player cannot speak (muted/throttled)");
         return;
+    }
 
     sender->UpdateSpeakTime(Player::ChatFloodThrottle::ADDON);
 
@@ -530,13 +551,41 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
         return;
 
     if (text.length() > 255)
+    {
+        TC_LOG_DEBUG("ams.debug", "REJECTED: Message too long ({} > 255)", text.length());
         return;
+    }
+
+    TC_LOG_DEBUG("ams.debug", "PASSED validation, routing by type {}", uint32(type));
 
     switch (type)
     {
         case CHAT_MSG_GUILD:
         case CHAT_MSG_OFFICER:
         {
+            TC_LOG_DEBUG("ams.debug", "Routing to GUILD/OFFICER");
+            
+            // Call Eluna hook for addon message processing
+            TC_LOG_DEBUG("ams.debug", "Calling Eluna OnAddonMessage hook (GUILD)");
+            std::string fullMessage = prefix + "\t" + text;
+#ifdef ELUNA
+            Eluna* eluna = sWorld->GetEluna();
+            if (eluna)
+            {
+                Guild* guild = sender->GetGuildId() ? sGuildMgr->GetGuildById(sender->GetGuildId()) : nullptr;
+                if (!eluna->OnAddonMessage(sender, type, fullMessage, nullptr, guild, nullptr, nullptr))
+                {
+                    TC_LOG_DEBUG("ams.debug", "Eluna blocked the message (GUILD)");
+                    break;
+                }
+                TC_LOG_DEBUG("ams.debug", "Eluna hook completed (GUILD), continuing to broadcast");
+            }
+            else
+            {
+                TC_LOG_DEBUG("ams.debug", "WARNING: Eluna not available!");
+            }
+#endif
+            
             if (sender->GetGuildId())
                 if (Guild* guild = sGuildMgr->GetGuildById(sender->GetGuildId()))
                     guild->BroadcastAddonToGuild(this, type == CHAT_MSG_OFFICER, text, prefix, isLogged);
@@ -544,25 +593,57 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
         }
         case CHAT_MSG_WHISPER:
         {
+            TC_LOG_DEBUG("ams.debug", "Routing to WHISPER, target: '{}'", target);
             /// @todo implement cross realm whispers (someday)
             Player* receiver = nullptr;
             if (targetGuid && !targetGuid->IsEmpty())
             {
                 receiver = ObjectAccessor::FindConnectedPlayer(*targetGuid);
+                TC_LOG_DEBUG("ams.debug", "Lookup by GUID: {}", receiver ? "FOUND" : "NOT FOUND");
             }
             else
             {
                 ExtendedPlayerName extName = ExtractExtendedPlayerName(target);
 
                 if (!normalizePlayerName(extName.Name))
+                {
+                    TC_LOG_DEBUG("ams.debug", "REJECTED: Invalid player name format");
                     break;
+                }
 
                 receiver = ObjectAccessor::FindConnectedPlayerByName(extName.Name);
+                TC_LOG_DEBUG("ams.debug", "Lookup by name '{}': {}", extName.Name, receiver ? "FOUND" : "NOT FOUND");
             }
             if (!receiver)
+            {
+                TC_LOG_DEBUG("ams.debug", "REJECTED: Receiver not found");
                 break;
+            }
 
+            // Call Eluna hook for addon message processing
+            TC_LOG_DEBUG("ams.debug", "Calling Eluna OnAddonMessage hook");
+            std::string fullMessage = prefix + "\t" + text;
+#ifdef ELUNA
+            Eluna* eluna = sWorld->GetEluna();
+            if (eluna)
+            {
+                if (!eluna->OnAddonMessage(sender, type, fullMessage, receiver, nullptr, nullptr, nullptr))
+                {
+                    TC_LOG_DEBUG("ams.debug", "Eluna blocked the message");
+                    break;
+                }
+                TC_LOG_DEBUG("ams.debug", "Eluna hook completed, continuing to WhisperAddon");
+            }
+            else
+            {
+                TC_LOG_DEBUG("ams.debug", "WARNING: Eluna not available!");
+            }
+#endif
+
+            TC_LOG_DEBUG("ams.debug", "Calling WhisperAddon - Sender: {}, Receiver: {}", 
+                        sender->GetName(), receiver->GetName());
             sender->WhisperAddon(text, prefix, isLogged, receiver);
+            TC_LOG_DEBUG("ams.debug", "WhisperAddon completed");
             break;
         }
         // Messages sent to "RAID" while in a party will get delivered to "PARTY"
