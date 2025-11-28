@@ -27,3 +27,5 @@ nbproject/*
 cmake-build-*/*
 .vs
 *.user
+
+.env
