@@ -148,7 +148,7 @@ function mainWindow:RegisterPanel(name, displayName, panelFrame)
     panelFrame:Hide()
     
     -- Create tab button
-    local tab = CreateFrame("Button", nil, self.tabBar, "UIPanelButtonTemplate")
+    local tab = CreateFrame("Button", nil, self.tabBar, "UIPanelButtonTemplate, BackdropTemplate")
     tab:SetSize(120, 24)
     tab:SetText(displayName)
     tab:SetScript("OnClick", function()
@@ -197,9 +197,32 @@ function mainWindow:ShowPanel(name)
             end
             
             if panelName == name then
-                tab:Disable()
+                -- Hide button's normal textures so backdrop shows through
+                if tab.Left then tab.Left:Hide() end
+                if tab.Right then tab.Right:Hide() end
+                if tab.Middle then tab.Middle:Hide() end
+                if tab:GetNormalTexture() then tab:GetNormalTexture():SetAlpha(0) end
+                if tab:GetPushedTexture() then tab:GetPushedTexture():SetAlpha(0) end
+                
+                -- Green active style
+                tab:SetBackdrop({
+                    bgFile = "Interface/Buttons/WHITE8x8",
+                    edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+                    tile = true, tileSize = 8, edgeSize = 8,
+                    insets = { left = 2, right = 2, top = 2, bottom = 2 }
+                })
+                tab:SetBackdropColor(0, 0.6, 0, 0.8)
+                tab:SetBackdropBorderColor(0, 1, 0, 1)
             else
-                tab:Enable()
+                -- Restore button's normal textures
+                if tab.Left then tab.Left:Show() end
+                if tab.Right then tab.Right:Show() end
+                if tab.Middle then tab.Middle:Show() end
+                if tab:GetNormalTexture() then tab:GetNormalTexture():SetAlpha(1) end
+                if tab:GetPushedTexture() then tab:GetPushedTexture():SetAlpha(1) end
+                
+                -- Normal style
+                tab:SetBackdrop(nil)
             end
         end
     end

@@ -52,6 +52,8 @@ class TC_GAME_API WaypointMgr
 
         void VisualizePath(Unit* owner, WaypointPath const* path, Optional<uint32> displayId);
         void DevisualizePath(Unit* owner, WaypointPath const* path);
+        void ClearAllVisualizations(Unit* owner);
+        bool IsPathVisualized(uint32 pathId) const;
 
         void MoveNode(WaypointPath const* path, WaypointNode const* node, Position const& pos);
         void DeleteNode(WaypointPath const* path, WaypointNode const* node);

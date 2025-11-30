@@ -316,7 +316,8 @@ end
 -- ============================================================================
 
 -- Request NPC data from server
-function ServerData:RequestNPCData(guid, callback)
+-- forceRefresh: if true, bypass cache and always fetch from server
+function ServerData:RequestNPCData(guid, callback, forceRefresh)
     if not AMS then
         print("[AraxiaTrinityAdmin] ERROR: AMS not loaded!")
         if callback then
@@ -333,13 +334,19 @@ function ServerData:RequestNPCData(guid, callback)
         return
     end
     
-    -- Check cache first
-    if self.cache[guid] then
+    -- Check cache first (unless forceRefresh is true)
+    if self.cache[guid] and not forceRefresh then
         print("[AraxiaTrinityAdmin] Using cached data for", guid)
         if callback then
             callback(self.cache[guid], nil)
         end
         return
+    end
+    
+    -- Clear cache if forcing refresh
+    if forceRefresh and self.cache[guid] then
+        print("[AraxiaTrinityAdmin] Force refresh - clearing cache for", guid)
+        self.cache[guid] = nil
     end
     
     -- Check if already loading
@@ -365,6 +372,21 @@ function ServerData:RequestNPCData(guid, callback)
     
     -- Send request to server
     AMS.Send("GET_NPC_DATA", {npcGUID = guid})
+    
+    -- Timeout after 5 seconds - clear loading state if no response
+    C_Timer.After(5, function()
+        if self.loading[guid] then
+            print("[AraxiaTrinityAdmin] Request timeout for", guid)
+            self.loading[guid] = nil
+            -- Call callbacks with error
+            if self.callbacks[guid] then
+                for _, cb in ipairs(self.callbacks[guid]) do
+                    cb(nil, "Request timed out")
+                end
+                self.callbacks[guid] = nil
+            end
+        end
+    end)
 end
 
 -- Clear cached data for a GUID

@@ -1545,8 +1545,10 @@ namespace LuaCreature
 
     /**
      * Visualizes the [Creature]'s waypoint path by spawning marker creatures at each node.
-     * Only visible to GMs. Call DevisualizeWaypointPath() to remove.
+     * By default only visible to GMs. Pass a [Player] to inherit their phase and make markers visible to them.
+     * Call DevisualizeWaypointPath() to remove.
      *
+     * @param [Player] phaseSource = nil : optional player whose phase the markers will inherit (makes them visible to that player)
      * @param uint32 displayId = nil : optional display ID for the markers
      * @return bool success : true if visualization was created
      */
@@ -1566,14 +1568,35 @@ namespace LuaCreature
             return 1;
         }
         
-        // Optional display ID parameter
+        // Optional player parameter for phase inheritance (arg 2)
+        Player* phaseSource = E->CHECKOBJ<Player>(2, false);
+        
+        // Optional display ID parameter (arg 3, or arg 2 if no player provided)
         Optional<uint32> displayId;
-        if (!lua_isnoneornil(E->L, 2))
+        int displayIdArg = phaseSource ? 3 : 2;
+        if (!lua_isnoneornil(E->L, displayIdArg))
         {
-            displayId = E->CHECKVAL<uint32>(2);
+            displayId = E->CHECKVAL<uint32>(displayIdArg);
         }
         
         sWaypointMgr->VisualizePath(creature, path, displayId);
+        
+        // If a player was provided, inherit their phase for all markers
+        if (phaseSource)
+        {
+            for (WaypointNode const& node : path->Nodes)
+            {
+                ObjectGuid const& markerGuid = sWaypointMgr->GetVisualGUIDByNode(path->Id, node.Id);
+                if (!markerGuid.IsEmpty())
+                {
+                    if (Creature* marker = ObjectAccessor::GetCreature(*creature, markerGuid))
+                    {
+                        PhasingHandler::InheritPhaseShift(marker, phaseSource);
+                    }
+                }
+            }
+        }
+        
         E->Push(true);
         return 1;
     }

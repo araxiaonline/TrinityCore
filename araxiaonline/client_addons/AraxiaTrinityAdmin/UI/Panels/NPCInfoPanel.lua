@@ -52,6 +52,71 @@ waypointButton:SetPoint("LEFT", deleteButton, "RIGHT", 5, 0)
 waypointButton:SetText("Show Waypoints")
 waypointButton:Disable()  -- Disabled until we have a creature with waypoints
 
+-- GM Toggle Button (top right)
+local gmButton = CreateFrame("Button", nil, npcPanel, "UIPanelButtonTemplate, BackdropTemplate")
+gmButton:SetSize(50, 22)
+gmButton:SetPoint("TOPRIGHT", npcPanel, "TOPRIGHT", -10, -10)
+gmButton:SetText("GM")
+
+local function UpdateGMButton()
+    -- Check if player is in GM mode
+    local isGM = _G.AraxiaTrinityAdminGMMode or false
+    if isGM then
+        -- Hide button's normal textures so backdrop shows through
+        if gmButton.Left then gmButton.Left:Hide() end
+        if gmButton.Right then gmButton.Right:Hide() end
+        if gmButton.Middle then gmButton.Middle:Hide() end
+        if gmButton:GetNormalTexture() then gmButton:GetNormalTexture():SetAlpha(0) end
+        if gmButton:GetPushedTexture() then gmButton:GetPushedTexture():SetAlpha(0) end
+        
+        -- Green background when GM mode is on
+        gmButton:SetBackdrop({
+            bgFile = "Interface/Buttons/WHITE8x8",
+            edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+            tile = true, tileSize = 8, edgeSize = 8,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 }
+        })
+        gmButton:SetBackdropColor(0, 0.6, 0, 0.8)  -- Green background
+        gmButton:SetBackdropBorderColor(0, 1, 0, 1)  -- Green border
+    else
+        -- Restore button's normal textures
+        if gmButton.Left then gmButton.Left:Show() end
+        if gmButton.Right then gmButton.Right:Show() end
+        if gmButton.Middle then gmButton.Middle:Show() end
+        if gmButton:GetNormalTexture() then gmButton:GetNormalTexture():SetAlpha(1) end
+        if gmButton:GetPushedTexture() then gmButton:GetPushedTexture():SetAlpha(1) end
+        
+        -- Default appearance when GM mode is off
+        gmButton:SetBackdrop(nil)
+    end
+end
+
+gmButton:SetScript("OnClick", function()
+    -- Toggle GM mode
+    _G.AraxiaTrinityAdminGMMode = not _G.AraxiaTrinityAdminGMMode
+    if _G.AraxiaTrinityAdminGMMode then
+        SendChatMessage(".gm on", "GUILD")
+        print("|cFF00FF00[ATA]|r GM mode enabled")
+    else
+        SendChatMessage(".gm off", "GUILD")
+        print("|cFF00FF00[ATA]|r GM mode disabled")
+    end
+    UpdateGMButton()
+end)
+
+gmButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine("Toggle GM Mode", 1, 1, 1)
+    GameTooltip:AddLine("Click to toggle .gm on/off", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+
+gmButton:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+UpdateGMButton()
+
 -- ============================================================================
 -- Tab Buttons
 -- ============================================================================
@@ -62,10 +127,10 @@ tabContainer:SetPoint("RIGHT", npcPanel, "CENTER", -10, 0)
 tabContainer:SetHeight(28)
 
 local tabs = {}
-local tabNames = {"Basic", "Stats", "AI"}
+local tabNames = {"Basic", "Stats", "AI", "Raw"}
 
 local function CreateTab(name, index)
-    local tab = CreateFrame("Button", nil, tabContainer, "UIPanelButtonTemplate")
+    local tab = CreateFrame("Button", nil, tabContainer, "UIPanelButtonTemplate, BackdropTemplate")
     tab:SetSize(70, 24)
     tab:SetText(name)
     if index == 1 then
@@ -77,6 +142,36 @@ local function CreateTab(name, index)
     return tab
 end
 
+-- Helper function to style a tab as active (green) or inactive (normal)
+local function StyleTabActive(tab, isActive)
+    if isActive then
+        -- Hide button's normal textures so backdrop shows through
+        if tab.Left then tab.Left:Hide() end
+        if tab.Right then tab.Right:Hide() end
+        if tab.Middle then tab.Middle:Hide() end
+        if tab:GetNormalTexture() then tab:GetNormalTexture():SetAlpha(0) end
+        if tab:GetPushedTexture() then tab:GetPushedTexture():SetAlpha(0) end
+        
+        tab:SetBackdrop({
+            bgFile = "Interface/Buttons/WHITE8x8",
+            edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+            tile = true, tileSize = 8, edgeSize = 8,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 }
+        })
+        tab:SetBackdropColor(0, 0.6, 0, 0.8)  -- Green background
+        tab:SetBackdropBorderColor(0, 1, 0, 1)  -- Green border
+    else
+        -- Restore button's normal textures
+        if tab.Left then tab.Left:Show() end
+        if tab.Right then tab.Right:Show() end
+        if tab.Middle then tab.Middle:Show() end
+        if tab:GetNormalTexture() then tab:GetNormalTexture():SetAlpha(1) end
+        if tab:GetPushedTexture() then tab:GetPushedTexture():SetAlpha(1) end
+        
+        tab:SetBackdrop(nil)
+    end
+end
+
 for i, name in ipairs(tabNames) do
     CreateTab(name, i)
 end
@@ -85,7 +180,7 @@ end
 -- Content Frames (one per tab)
 -- ============================================================================
 
-local function CreateScrollableContent(parent)
+local function CreateScrollableContent(parent, useEditBox)
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     frame:SetPoint("TOPLEFT", tabContainer, "BOTTOMLEFT", 0, -5)
     frame:SetPoint("BOTTOMLEFT", npcPanel, "BOTTOMLEFT", 10, 10)
@@ -108,49 +203,424 @@ local function CreateScrollableContent(parent)
     child:SetSize(1, 1)
     scroll:SetScrollChild(child)
     
-    local text = child:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    text:SetPoint("TOPLEFT", child, "TOPLEFT", 5, -5)
-    text:SetJustifyH("LEFT")
-    text:SetJustifyV("TOP")
-    text:SetWidth(280)
+    local text
+    if useEditBox then
+        -- Use EditBox for large text (like Raw tab)
+        text = CreateFrame("EditBox", nil, child)
+        text:SetPoint("TOPLEFT", child, "TOPLEFT", 5, -5)
+        text:SetPoint("RIGHT", child, "RIGHT", -5, 0)
+        text:SetFontObject("GameFontHighlight")
+        text:SetMultiLine(true)
+        text:SetAutoFocus(false)
+        text:EnableMouse(true)
+        text:SetHyperlinksEnabled(false)
+        text:SetTextInsets(0, 0, 0, 0)
+        text:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        -- Make it read-only looking but still scrollable/selectable
+        text:SetScript("OnEditFocusGained", function(self) self:HighlightText(0, 0) end)
+    else
+        text = child:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        text:SetPoint("TOPLEFT", child, "TOPLEFT", 5, -5)
+        text:SetJustifyH("LEFT")
+        text:SetJustifyV("TOP")
+        text:SetWidth(280)
+    end
     
     frame.scroll = scroll
     frame.child = child
     frame.text = text
+    frame.useEditBox = useEditBox
     
     return frame
 end
 
 local contentFrames = {}
 for _, name in ipairs(tabNames) do
-    contentFrames[name] = CreateScrollableContent(npcPanel)
+    -- Use EditBox for Raw tab to handle large text
+    local useEditBox = (name == "Raw")
+    contentFrames[name] = CreateScrollableContent(npcPanel, useEditBox)
 end
 
 -- ============================================================================
--- Right side: 3D Model display
+-- Right side: Tabbed panel (3D Model / Waypoints / Paths)
 -- ============================================================================
 
-local modelFrame = CreateFrame("Frame", nil, npcPanel, "BackdropTemplate")
-modelFrame:SetPoint("TOPLEFT", tabContainer, "BOTTOMRIGHT", 15, -5)
-modelFrame:SetPoint("BOTTOMRIGHT", npcPanel, "BOTTOMRIGHT", -10, 10)
-modelFrame:SetBackdrop({
+-- Current right tab
+local currentRightTab = "3D Model"
+
+-- Tracked paths storage: { [creatureGUID] = { name, entry, pathId, nodeCount } }
+-- Initialized from SavedVariables below
+local trackedPaths = {}
+
+-- Function to save tracked paths to SavedVariables
+local function SaveTrackedPaths()
+    if AraxiaTrinityAdminDB then
+        AraxiaTrinityAdminDB.trackedPaths = trackedPaths
+    end
+end
+
+-- Function to load tracked paths from SavedVariables
+local function LoadTrackedPaths()
+    if AraxiaTrinityAdminDB and AraxiaTrinityAdminDB.trackedPaths then
+        trackedPaths = AraxiaTrinityAdminDB.trackedPaths
+    end
+end
+
+-- Right side tab container (positioned relative to the left tabs)
+local rightTabContainer = CreateFrame("Frame", nil, npcPanel)
+rightTabContainer:SetPoint("TOPLEFT", tabContainer, "TOPRIGHT", 15, 0)
+rightTabContainer:SetPoint("RIGHT", npcPanel, "RIGHT", -10, 0)
+rightTabContainer:SetHeight(28)
+
+-- Right side tabs
+local rightTabs = {}
+local rightTabNames = {"3D Model", "Waypoints", "Paths"}
+
+local function CreateRightTab(name, index)
+    local tab = CreateFrame("Button", nil, rightTabContainer, "UIPanelButtonTemplate, BackdropTemplate")
+    tab:SetSize(80, 24)
+    tab:SetText(name)
+    if index == 1 then
+        tab:SetPoint("LEFT", rightTabContainer, "LEFT", 0, 0)
+    else
+        tab:SetPoint("LEFT", rightTabs[index-1], "RIGHT", 2, 0)
+    end
+    rightTabs[index] = tab
+    return tab
+end
+
+for i, name in ipairs(rightTabNames) do
+    CreateRightTab(name, i)
+end
+
+-- Right side content container (shared backdrop)
+local rightContentFrame = CreateFrame("Frame", nil, npcPanel, "BackdropTemplate")
+rightContentFrame:SetPoint("TOPLEFT", rightTabContainer, "BOTTOMLEFT", 0, -5)
+rightContentFrame:SetPoint("BOTTOMRIGHT", npcPanel, "BOTTOMRIGHT", -10, 10)
+rightContentFrame:SetBackdrop({
     bgFile = "Interface/Tooltips/UI-Tooltip-Background",
     edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
     tile = true, tileSize = 16, edgeSize = 16,
     insets = { left = 4, right = 4, top = 4, bottom = 4 }
 })
-modelFrame:SetBackdropColor(0, 0, 0, 0.5)
-modelFrame:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
+rightContentFrame:SetBackdropColor(0, 0, 0, 0.5)
+rightContentFrame:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
 
-local modelTitle = modelFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-modelTitle:SetPoint("TOP", modelFrame, "TOP", 0, -8)
+-- ============================================================================
+-- Right Tab Content: 3D Model
+-- ============================================================================
+
+local modelContent = CreateFrame("Frame", nil, rightContentFrame)
+modelContent:SetAllPoints(rightContentFrame)
+
+local modelTitle = modelContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+modelTitle:SetPoint("TOP", modelContent, "TOP", 0, -8)
 modelTitle:SetText("3D Model")
 
-local npcModel = CreateFrame("PlayerModel", nil, modelFrame)
-npcModel:SetPoint("TOPLEFT", modelFrame, "TOPLEFT", 8, -30)
-npcModel:SetPoint("BOTTOMRIGHT", modelFrame, "BOTTOMRIGHT", -8, 8)
+local npcModel = CreateFrame("PlayerModel", nil, modelContent)
+npcModel:SetPoint("TOPLEFT", modelContent, "TOPLEFT", 8, -30)
+npcModel:SetPoint("BOTTOMRIGHT", modelContent, "BOTTOMRIGHT", -8, 8)
 npcModel:SetCamDistanceScale(1.5)
 npcModel:SetRotation(0.61)
+
+-- Model zoom state
+local modelZoom = 1.5
+local modelRotation = 0.61
+
+-- Scroll wheel to zoom the model
+npcModel:EnableMouseWheel(true)
+npcModel:SetScript("OnMouseWheel", function(self, delta)
+    modelZoom = modelZoom - (delta * 0.2)
+    modelZoom = math.max(0.3, math.min(5.0, modelZoom))  -- Clamp between 0.3 and 5.0
+    self:SetCamDistanceScale(modelZoom)
+end)
+
+-- Click and drag to rotate the model (horizontal only)
+local isDragging = false
+local dragStartX = 0
+
+npcModel:EnableMouse(true)
+npcModel:SetScript("OnMouseDown", function(self, button)
+    if button == "LeftButton" then
+        isDragging = true
+        dragStartX = GetCursorPosition()
+    end
+end)
+
+npcModel:SetScript("OnMouseUp", function(self, button)
+    if button == "LeftButton" then
+        isDragging = false
+    end
+end)
+
+npcModel:SetScript("OnUpdate", function(self, elapsed)
+    if isDragging then
+        local currentX = GetCursorPosition()
+        local deltaX = (currentX - dragStartX) * 0.01
+        modelRotation = modelRotation + deltaX
+        self:SetRotation(modelRotation)
+        dragStartX = currentX
+    end
+end)
+
+-- Tooltip for model interaction hints
+npcModel:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
+    GameTooltip:AddLine("3D Model", 1, 1, 1)
+    GameTooltip:AddLine("Scroll to zoom", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("Drag to rotate", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+
+npcModel:SetScript("OnLeave", function(self)
+    GameTooltip:Hide()
+    isDragging = false  -- Stop dragging if mouse leaves
+end)
+
+-- ============================================================================
+-- Right Tab Content: Waypoints
+-- ============================================================================
+
+local waypointContent = CreateFrame("Frame", nil, rightContentFrame)
+waypointContent:SetAllPoints(rightContentFrame)
+waypointContent:Hide()
+
+local waypointTitle = waypointContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+waypointTitle:SetPoint("TOP", waypointContent, "TOP", 0, -8)
+waypointTitle:SetText("Waypoint Editor")
+
+-- Waypoint info text area
+local waypointInfoText = waypointContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+waypointInfoText:SetPoint("TOPLEFT", waypointContent, "TOPLEFT", 12, -35)
+waypointInfoText:SetPoint("TOPRIGHT", waypointContent, "TOPRIGHT", -12, -35)
+waypointInfoText:SetJustifyH("LEFT")
+waypointInfoText:SetJustifyV("TOP")
+waypointInfoText:SetText("|cFF888888No creature selected.|r\n\nSelect a creature to view waypoint options.")
+
+-- Waypoint action buttons container
+local waypointButtonContainer = CreateFrame("Frame", nil, waypointContent)
+waypointButtonContainer:SetPoint("BOTTOMLEFT", waypointContent, "BOTTOMLEFT", 8, 8)
+waypointButtonContainer:SetPoint("BOTTOMRIGHT", waypointContent, "BOTTOMRIGHT", -8, 8)
+waypointButtonContainer:SetHeight(100)
+
+-- ============================================================================
+-- Right Tab Content: Paths (tracked waypoint visualizations)
+-- ============================================================================
+
+local pathsContent = CreateFrame("Frame", nil, rightContentFrame)
+pathsContent:SetAllPoints(rightContentFrame)
+pathsContent:Hide()
+
+local pathsTitle = pathsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+pathsTitle:SetPoint("TOP", pathsContent, "TOP", 0, -8)
+pathsTitle:SetText("Tracked Paths")
+
+local pathsHelpText = pathsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+pathsHelpText:SetPoint("TOP", pathsTitle, "BOTTOM", 0, -4)
+pathsHelpText:SetText("|cFF888888Shift+Click to remove|r")
+
+-- Forward declaration for UpdatePathsList (defined below)
+local UpdatePathsList
+
+-- Clear All button (top right)
+local clearAllButton = CreateFrame("Button", nil, pathsContent, "UIPanelButtonTemplate")
+clearAllButton:SetSize(70, 20)
+clearAllButton:SetPoint("TOPRIGHT", pathsContent, "TOPRIGHT", -8, -8)
+clearAllButton:SetText("Clear All")
+clearAllButton:SetScript("OnClick", function()
+    -- Send request to clear all waypoint markers (uses C++ ClearAllWaypointVisualizations)
+    if AMS then
+        AMS.Send("CLEAR_ALL_WAYPOINT_MARKERS", {})
+    end
+    -- Clear local tracking
+    trackedPaths = {}
+    SaveTrackedPaths()
+    UpdatePathsList()
+    -- Reset waypoint button state
+    waypointsVisible = false
+    waypointButton:SetText("Show Waypoints")
+    print("|cFF00FF00[ATA]|r Cleared all tracked paths")
+end)
+clearAllButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:AddLine("Clear All Paths", 1, 1, 1)
+    GameTooltip:AddLine("Removes all paths from tracker", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("and hides markers in the world.", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+clearAllButton:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+-- Scrollable container for path entries
+local pathsScrollFrame = CreateFrame("ScrollFrame", nil, pathsContent, "UIPanelScrollFrameTemplate")
+pathsScrollFrame:SetPoint("TOPLEFT", pathsContent, "TOPLEFT", 8, -45)
+pathsScrollFrame:SetPoint("BOTTOMRIGHT", pathsContent, "BOTTOMRIGHT", -28, 8)
+
+local pathsScrollChild = CreateFrame("Frame", nil, pathsScrollFrame)
+pathsScrollChild:SetSize(1, 1)
+pathsScrollFrame:SetScrollChild(pathsScrollChild)
+
+-- Table to hold path entry buttons
+local pathEntryButtons = {}
+
+-- Function to update the paths list display
+UpdatePathsList = function()
+    -- Hide all existing buttons
+    for _, button in ipairs(pathEntryButtons) do
+        button:Hide()
+    end
+    
+    -- Count tracked paths
+    local count = 0
+    for _ in pairs(trackedPaths) do
+        count = count + 1
+    end
+    
+    if count == 0 then
+        -- Show empty message (parent to pathsContent for proper centering)
+        if not pathsContent.emptyText then
+            pathsContent.emptyText = pathsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            pathsContent.emptyText:SetPoint("TOP", pathsContent, "TOP", 0, -60)
+            pathsContent.emptyText:SetPoint("LEFT", pathsContent, "LEFT", 20, 0)
+            pathsContent.emptyText:SetPoint("RIGHT", pathsContent, "RIGHT", -20, 0)
+            pathsContent.emptyText:SetJustifyH("CENTER")
+        end
+        pathsContent.emptyText:SetText("|cFF888888No paths being tracked.|r\n\nUse 'Show Waypoints' on creatures\nto track their paths here.")
+        pathsContent.emptyText:Show()
+        pathsScrollChild:SetHeight(100)
+        return
+    end
+    
+    -- Hide empty text if we have paths
+    if pathsContent.emptyText then
+        pathsContent.emptyText:Hide()
+    end
+    
+    -- Create/update buttons for each tracked path
+    local index = 0
+    for guid, pathData in pairs(trackedPaths) do
+        index = index + 1
+        
+        -- Create button if needed
+        if not pathEntryButtons[index] then
+            local btn = CreateFrame("Button", nil, pathsScrollChild)
+            btn:SetSize(200, 40)
+            btn:EnableMouse(true)
+            btn:RegisterForClicks("AnyUp")
+            btn:SetHighlightTexture("Interface/QuestFrame/UI-QuestTitleHighlight", "ADD")
+            
+            btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+            btn.bg:SetAllPoints()
+            btn.bg:SetColorTexture(0.2, 0.2, 0.2, 0.5)
+            
+            btn.name = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            btn.name:SetPoint("TOPLEFT", btn, "TOPLEFT", 8, -6)
+            btn.name:SetJustifyH("LEFT")
+            
+            btn.info = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            btn.info:SetPoint("TOPLEFT", btn.name, "BOTTOMLEFT", 0, -2)
+            btn.info:SetJustifyH("LEFT")
+            
+            pathEntryButtons[index] = btn
+        end
+        
+        local btn = pathEntryButtons[index]
+        btn.guid = guid
+        btn.pathData = pathData
+        
+        -- Position
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", pathsScrollChild, "TOPLEFT", 0, -((index-1) * 42))
+        btn:SetPoint("RIGHT", pathsScrollChild, "RIGHT", 0, 0)
+        
+        -- Update text
+        btn.name:SetText("|cFFFFD700" .. (pathData.name or "Unknown") .. "|r")
+        btn.info:SetText(string.format("Entry: %s | Path: %d | Nodes: %d", 
+            pathData.entry or "?", 
+            pathData.pathId or 0, 
+            pathData.nodeCount or 0))
+        
+        -- Click handler (TODO: Shift+Click not working - buttons need to be proper clickable buttons)
+        btn:SetScript("OnClick", function(self, button)
+            if IsShiftKeyDown() then
+                -- Remove from tracking AND hide the markers in the world
+                local creatureGUID = self.guid
+                if trackedPaths[creatureGUID] then
+                    -- Send hide request to server
+                    if AMS then
+                        AMS.Send("HIDE_WAYPOINTS_BY_GUID", { guid = creatureGUID })
+                    end
+                    trackedPaths[creatureGUID] = nil
+                    print("|cFF00FF00[ATA]|r Removed path: " .. (self.pathData.name or "Unknown"))
+                    UpdatePathsList()
+                    SaveTrackedPaths()
+                    
+                    -- If this was the current target, reset waypoint button state
+                    if creatureGUID == currentTargetGUID then
+                        waypointsVisible = false
+                        waypointButton:SetText("Show Waypoints")
+                    end
+                end
+            end
+        end)
+        
+        btn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(self.pathData.name or "Unknown", 1, 0.82, 0)
+            GameTooltip:AddLine("Path ID: " .. (self.pathData.pathId or 0), 1, 1, 1)
+            GameTooltip:AddLine("Nodes: " .. (self.pathData.nodeCount or 0), 1, 1, 1)
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("|cFFFF8800Shift+Click|r to remove path", 0.5, 0.5, 0.5)
+            GameTooltip:AddLine("(hides markers in-game)", 0.4, 0.4, 0.4)
+            GameTooltip:Show()
+        end)
+        
+        btn:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        
+        btn:Show()
+    end
+    
+    -- Update scroll child height
+    pathsScrollChild:SetHeight(math.max(index * 42, pathsScrollFrame:GetHeight()))
+end
+
+-- Store right content frames for tab switching
+local rightContentFrames = {
+    ["3D Model"] = modelContent,
+    ["Waypoints"] = waypointContent,
+    ["Paths"] = pathsContent
+}
+
+-- ============================================================================
+-- Right Tab Switching
+-- ============================================================================
+
+local function ShowRightTab(tabName)
+    currentRightTab = tabName
+    for name, frame in pairs(rightContentFrames) do
+        if name == tabName then
+            frame:Show()
+        else
+            frame:Hide()
+        end
+    end
+    -- Update tab button appearance with green active style
+    for i, tab in ipairs(rightTabs) do
+        StyleTabActive(tab, rightTabNames[i] == tabName)
+    end
+end
+
+for i, tab in ipairs(rightTabs) do
+    tab:SetScript("OnClick", function()
+        ShowRightTab(rightTabNames[i])
+    end)
+end
+
+-- Initialize right tabs
+ShowRightTab("3D Model")
 
 -- ============================================================================
 -- Tab Switching
@@ -165,13 +635,9 @@ local function ShowTab(tabName)
             frame:Hide()
         end
     end
-    -- Update tab button appearance
+    -- Update tab button appearance with green active style
     for i, tab in ipairs(tabs) do
-        if tabNames[i] == tabName then
-            tab:SetEnabled(false)
-        else
-            tab:SetEnabled(true)
-        end
+        StyleTabActive(tab, tabNames[i] == tabName)
     end
 end
 
@@ -447,6 +913,75 @@ local function FormatAITab(npcData, sData)
     return table.concat(lines, "\n")
 end
 
+-- Simple JSON-like pretty printer for Lua tables
+local function PrettyPrint(obj, indent)
+    indent = indent or 0
+    local indentStr = string.rep("  ", indent)
+    local nextIndent = string.rep("  ", indent + 1)
+    
+    if type(obj) == "nil" then
+        return "|cFF888888null|r"
+    elseif type(obj) == "boolean" then
+        return obj and "|cFF00FF00true|r" or "|cFFFF0000false|r"
+    elseif type(obj) == "number" then
+        return "|cFF00FFFF" .. tostring(obj) .. "|r"
+    elseif type(obj) == "string" then
+        return "|cFFFFFF00\"" .. obj .. "\"|r"
+    elseif type(obj) == "table" then
+        local lines = {}
+        local isArray = #obj > 0
+        
+        if isArray then
+            table.insert(lines, "[")
+            for i, v in ipairs(obj) do
+                local comma = (i < #obj) and "," or ""
+                table.insert(lines, nextIndent .. PrettyPrint(v, indent + 1) .. comma)
+            end
+            table.insert(lines, indentStr .. "]")
+        else
+            table.insert(lines, "{")
+            local keys = {}
+            for k in pairs(obj) do
+                table.insert(keys, k)
+            end
+            table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+            
+            for i, k in ipairs(keys) do
+                local comma = (i < #keys) and "," or ""
+                local keyStr = "|cFF00FF00\"" .. tostring(k) .. "\"|r"
+                table.insert(lines, nextIndent .. keyStr .. ": " .. PrettyPrint(obj[k], indent + 1) .. comma)
+            end
+            table.insert(lines, indentStr .. "}")
+        end
+        return table.concat(lines, "\n")
+    else
+        return "|cFF888888<" .. type(obj) .. ">|r"
+    end
+end
+
+local function FormatRawTab(npcData, sData)
+    local lines = {}
+    
+    if isLoadingServerData then
+        return "|cFF888888Loading raw server data...|r"
+    end
+    
+    if not sData then
+        return "|cFF888888No server data available.|r\n\n|cFF888888Click Refresh to load data from server.|r"
+    end
+    
+    if sData.error then
+        return "|cFFFF0000Error:|r " .. tostring(sData.error)
+    end
+    
+    table.insert(lines, "|cFFFFD700Raw Server Data|r")
+    table.insert(lines, "|cFF888888(Scroll to see all data)|r")
+    table.insert(lines, "")
+    table.insert(lines, PrettyPrint(sData, 0))
+    
+    return table.concat(lines, "\n")
+end
+
 -- ============================================================================
 -- Update Functions
 -- ============================================================================
@@ -456,12 +991,28 @@ local function UpdateContentSize(frame)
     if scrollWidth > 0 then
         frame.text:SetWidth(scrollWidth - 40)
     end
-    local textHeight = frame.text:GetStringHeight()
+    
+    local textHeight
+    if frame.useEditBox then
+        -- EditBox needs to be sized first, then we get its height
+        frame.text:SetWidth(scrollWidth - 40)
+        -- Force layout update
+        textHeight = frame.text:GetHeight()
+        if textHeight < 100 then
+            -- EditBox might not have calculated height yet, estimate based on text
+            local text = frame.text:GetText() or ""
+            local lineCount = select(2, text:gsub("\n", "\n")) + 1
+            textHeight = lineCount * 14  -- Approximate line height
+        end
+    else
+        textHeight = frame.text:GetStringHeight()
+    end
+    
     frame.child:SetWidth(math.max(scrollWidth, 1))
-    frame.child:SetHeight(math.max(textHeight + 10, frame.scroll:GetHeight()))
+    frame.child:SetHeight(math.max(textHeight + 20, frame.scroll:GetHeight()))
 end
 
-function npcPanel:Update(requestServerData)
+function npcPanel:Update(requestServerData, forceRefresh)
     local npcData = ATA:GetTargetNPCInfo()
     
     -- Update Basic tab
@@ -476,6 +1027,10 @@ function npcPanel:Update(requestServerData)
     contentFrames["AI"].text:SetText(FormatAITab(npcData, serverData))
     UpdateContentSize(contentFrames["AI"])
     
+    -- Update Raw tab
+    contentFrames["Raw"].text:SetText(FormatRawTab(npcData, serverData))
+    UpdateContentSize(contentFrames["Raw"])
+    
     -- Request server data if needed
     if requestServerData and npcData and npcData.guid and ATA.ServerData then
         isLoadingServerData = true
@@ -484,6 +1039,7 @@ function npcPanel:Update(requestServerData)
         -- Update displays to show loading
         contentFrames["Stats"].text:SetText(FormatStatsTab(npcData, nil))
         contentFrames["AI"].text:SetText(FormatAITab(npcData, nil))
+        contentFrames["Raw"].text:SetText(FormatRawTab(npcData, nil))
         
         ATA.ServerData:RequestNPCData(npcData.guid, function(data, error)
             isLoadingServerData = false
@@ -492,7 +1048,7 @@ function npcPanel:Update(requestServerData)
             else
                 serverData = data
             end
-            npcPanel:Update(false)
+            npcPanel:Update(false, false)
             
             -- Enable waypoint button if creature has a waypoint path
             if data and data.movement and data.movement.waypointPath then
@@ -500,17 +1056,55 @@ function npcPanel:Update(requestServerData)
             else
                 waypointButton:Disable()
             end
-        end)
+        end, forceRefresh)  -- Pass forceRefresh to bypass cache
     end
     
     -- Update 3D model
     if npcData and UnitExists("target") then
         npcModel:SetUnit("target")
-        npcModel:SetCamDistanceScale(1.5)
-        npcModel:SetRotation(0.61)
+        -- Reset zoom and rotation to defaults for new target
+        modelZoom = 1.5
+        modelRotation = 0.61
+        npcModel:SetCamDistanceScale(modelZoom)
+        npcModel:SetRotation(modelRotation)
     else
         npcModel:ClearModel()
         npcModel:SetModel("interface/buttons/talktomequestionmark.m2")
+    end
+    
+    -- Update Waypoint tab content
+    if npcData then
+        local waypointLines = {}
+        table.insert(waypointLines, "|cFFFFD700" .. (npcData.name or "Unknown") .. "|r")
+        table.insert(waypointLines, "Entry: " .. (npcData.npcID or "?"))
+        table.insert(waypointLines, "")
+        
+        if serverData and serverData.movement and serverData.movement.waypointPath then
+            local wp = serverData.movement.waypointPath
+            local pathId = wp.pathId or 0
+            if pathId > 0 then
+                table.insert(waypointLines, "|cFF00FF00Has Waypoint Path|r")
+                table.insert(waypointLines, "Path ID: " .. pathId)
+                table.insert(waypointLines, "Nodes: " .. (wp.nodeCount or 0))
+                table.insert(waypointLines, "")
+                table.insert(waypointLines, "|cFF888888Use the 'Show Waypoints' button|r")
+                table.insert(waypointLines, "|cFF888888to visualize the path in 3D.|r")
+            else
+                table.insert(waypointLines, "|cFFFF8800No Waypoint Path|r")
+                table.insert(waypointLines, "")
+                table.insert(waypointLines, "|cFF888888This creature does not have|r")
+                table.insert(waypointLines, "|cFF888888a defined waypoint path.|r")
+            end
+        elseif isLoadingServerData then
+            table.insert(waypointLines, "|cFF888888Loading waypoint data...|r")
+        else
+            table.insert(waypointLines, "|cFF888888Server data not loaded.|r")
+            table.insert(waypointLines, "|cFF888888Click Refresh to load.|r")
+        end
+        
+        waypointInfoText:SetText(table.concat(waypointLines, "\n"))
+    else
+        waypointInfoText:SetText("|cFF888888No creature selected.|r\n\nSelect a creature to view waypoint options.")
     end
 end
 
@@ -519,7 +1113,7 @@ end
 -- ============================================================================
 
 refreshButton:SetScript("OnClick", function()
-    npcPanel:Update(true)
+    npcPanel:Update(true, true)  -- Always force refresh from server, bypass cache
 end)
 
 deleteButton:SetScript("OnClick", function()
@@ -535,6 +1129,9 @@ deleteButton:SetScript("OnClick", function()
     end
 end)
 
+-- Pending waypoint request data (stored while waiting for response)
+local pendingWaypointRequest = nil
+
 -- Waypoint visualization toggle
 waypointButton:SetScript("OnClick", function()
     if not AMS then
@@ -549,6 +1146,17 @@ waypointButton:SetScript("OnClick", function()
     end
     
     currentTargetGUID = npcData.guid
+    
+    -- Store data for tracking when response arrives
+    local wp = serverData and serverData.movement and serverData.movement.waypointPath
+    pendingWaypointRequest = {
+        guid = npcData.guid,
+        name = npcData.name or "Unknown",
+        entry = npcData.npcID or "?",
+        pathId = wp and wp.pathId or 0,
+        nodeCount = wp and wp.nodeCount or 0,
+        action = waypointsVisible and "hide" or "show"
+    }
     
     if waypointsVisible then
         -- Hide waypoints
@@ -578,10 +1186,34 @@ local function InitWaypointHandler()
             waypointButton:SetText(waypointsVisible and "Hide Waypoints" or "Show Waypoints")
             waypointButton:Enable()
             print("|cFF00FF00[ATA]|r " .. (data.message or "Done"))
+            
+            -- Track/untrack the path
+            if pendingWaypointRequest then
+                if pendingWaypointRequest.action == "show" then
+                    -- Add to tracked paths
+                    trackedPaths[pendingWaypointRequest.guid] = {
+                        name = pendingWaypointRequest.name,
+                        entry = pendingWaypointRequest.entry,
+                        pathId = data.pathId or pendingWaypointRequest.pathId,
+                        nodeCount = pendingWaypointRequest.nodeCount
+                    }
+                    print("|cFF00FF00[ATA]|r Tracking path for: " .. pendingWaypointRequest.name)
+                elseif pendingWaypointRequest.action == "hide" then
+                    -- Remove from tracked paths
+                    if trackedPaths[pendingWaypointRequest.guid] then
+                        trackedPaths[pendingWaypointRequest.guid] = nil
+                        print("|cFF00FF00[ATA]|r Untracked path for: " .. pendingWaypointRequest.name)
+                    end
+                end
+                pendingWaypointRequest = nil
+                UpdatePathsList()
+                SaveTrackedPaths()
+            end
         else
             waypointButton:SetText(waypointsVisible and "Hide Waypoints" or "Show Waypoints")
             waypointButton:Enable()
             print("|cFFFF0000[ATA]|r " .. (data.error or "Failed"))
+            pendingWaypointRequest = nil
         end
     end)
 end
@@ -593,10 +1225,21 @@ updateFrame:SetScript("OnEvent", function()
     if npcPanel:IsShown() then
         serverData = nil
         isLoadingServerData = false
-        -- Reset waypoint state on target change
-        waypointsVisible = false
-        waypointButton:SetText("Show Waypoints")
-        waypointButton:Disable()
+        
+        -- Check if the new target has waypoints already visible
+        local npcData = ATA:GetTargetNPCInfo()
+        if npcData and npcData.guid and trackedPaths[npcData.guid] then
+            -- This NPC's path is already being tracked/visible
+            waypointsVisible = true
+            waypointButton:SetText("Hide Waypoints")
+            currentTargetGUID = npcData.guid
+        else
+            -- Reset waypoint state for new target
+            waypointsVisible = false
+            waypointButton:SetText("Show Waypoints")
+            currentTargetGUID = npcData and npcData.guid or nil
+        end
+        waypointButton:Disable()  -- Will be enabled by Update() if creature has waypoints
         npcPanel:Update(true)
     end
 end)
@@ -606,6 +1249,10 @@ end)
 -- ============================================================================
 
 ShowTab("Basic")  -- Default tab
+
+-- Load tracked paths from SavedVariables
+LoadTrackedPaths()
+UpdatePathsList()
 
 local function InitPanel()
     if ATA.MainWindow then

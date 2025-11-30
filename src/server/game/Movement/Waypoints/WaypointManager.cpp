@@ -222,7 +222,16 @@ void WaypointMgr::VisualizePath(Unit* owner, WaypointPath const* path, Optional<
 
         auto itr = _nodeToVisualWaypointGUIDsMap.find(pathNodePair);
         if (itr != _nodeToVisualWaypointGUIDsMap.end())
-            continue;
+        {
+            // Validate that the tracked creature still exists
+            Creature* existingMarker = ObjectAccessor::GetCreature(*owner, itr->second);
+            if (existingMarker)
+                continue;  // Marker exists, skip
+            
+            // Marker is gone (stale entry), clean up and respawn
+            _visualWaypointGUIDToNodeMap.erase(itr->second);
+            _nodeToVisualWaypointGUIDsMap.erase(pathNodePair);
+        }
 
         TempSummon* summon = owner->SummonCreature(VISUAL_WAYPOINT, node.X, node.Y, node.Z, node.Orientation ? *node.Orientation : 0.0f);
         if (!summon)
@@ -248,15 +257,44 @@ void WaypointMgr::DevisualizePath(Unit* owner, WaypointPath const* path)
         if (itr == _nodeToVisualWaypointGUIDsMap.end())
             continue;
 
-        Creature* creature = ObjectAccessor::GetCreature(*owner, itr->second);
-        if (!creature)
-            continue;
-
-        _visualWaypointGUIDToNodeMap.erase(itr->second);
+        // Always clean up the maps, even if creature is already gone
+        ObjectGuid markerGuid = itr->second;
+        _visualWaypointGUIDToNodeMap.erase(markerGuid);
         _nodeToVisualWaypointGUIDsMap.erase(pathNodePair);
 
-        creature->DespawnOrUnsummon();
+        // Try to despawn the creature if it still exists
+        if (owner)
+        {
+            if (Creature* creature = ObjectAccessor::GetCreature(*owner, markerGuid))
+                creature->DespawnOrUnsummon();
+        }
     }
+}
+
+void WaypointMgr::ClearAllVisualizations(Unit* owner)
+{
+    // Despawn all tracked visual waypoint creatures and clear tracking maps
+    for (auto const& pair : _nodeToVisualWaypointGUIDsMap)
+    {
+        if (owner)
+        {
+            if (Creature* creature = ObjectAccessor::GetCreature(*owner, pair.second))
+                creature->DespawnOrUnsummon();
+        }
+    }
+    
+    _nodeToVisualWaypointGUIDsMap.clear();
+    _visualWaypointGUIDToNodeMap.clear();
+}
+
+bool WaypointMgr::IsPathVisualized(uint32 pathId) const
+{
+    for (auto const& pair : _nodeToVisualWaypointGUIDsMap)
+    {
+        if (pair.first.first == pathId)
+            return true;
+    }
+    return false;
 }
 
 void WaypointMgr::MoveNode(WaypointPath const* path, WaypointNode const* node, Position const& pos)

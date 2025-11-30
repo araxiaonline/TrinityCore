@@ -91,7 +91,6 @@ AMS.RegisterHandler("GET_NPC_DATA", function(player, data)
     
     print("[Admin Handlers] GET_NPC_DATA: Fetching data for GUID:", npcGUID)
     
-    -- Get the creature from player's selection (safer than parsing GUID string)
     local creature = player:GetSelection()
     
     if not creature then
@@ -228,6 +227,7 @@ AMS.RegisterHandler("GET_NPC_DATA", function(player, data)
     end
     
     -- Get creature template data using safe C++ method
+    -- Note: This can be large for some creatures (several KB), contributing to payload size
     response.template = SafeGet(function() return creature:GetCreatureTemplateData() end, nil)
     
     -- Stats - using safe C++ GetStat method
@@ -286,8 +286,12 @@ AMS.RegisterHandler("SHOW_WAYPOINTS", function(player, data)
         return
     end
     
+    -- Clear any existing visualization first (fixes state after Clear All)
+    pcall(function() creature:DevisualizeWaypointPath() end)
+    
     -- Visualize the path (spawns marker creatures at each waypoint)
-    local success, err = pcall(function() return creature:VisualizeWaypointPath() end)
+    -- Pass player to inherit their phase (makes markers visible without GM mode)
+    local success, err = pcall(function() return creature:VisualizeWaypointPath(player) end)
     if not success then
         print("[Admin Handlers] SHOW_WAYPOINTS: Error calling VisualizeWaypointPath:", err)
     end
@@ -342,6 +346,31 @@ AMS.RegisterHandler("HIDE_WAYPOINTS", function(player, data)
     end
 end)
 
+-- Hide waypoints by GUID (for Clear All / Paths tab)
+-- Note: Markers are tied to creatures - they'll despawn when creature respawns or server restarts
+-- This handler logs the request for debugging
+AMS.RegisterHandler("HIDE_WAYPOINTS_BY_GUID", function(player, data)
+    if not data or not data.guid then
+        print("[Admin Handlers] HIDE_WAYPOINTS_BY_GUID: No GUID provided")
+        return
+    end
+    
+    print("[Admin Handlers] HIDE_WAYPOINTS_BY_GUID: Acknowledged clear request for GUID:", data.guid)
+    -- Note: If the creature is not the player's current target, we can't easily devisualize
+    -- The client tracker is the source of truth; markers will despawn naturally
+end)
+
+-- Clear ALL waypoint markers and reset WaypointManager tracking state
+AMS.RegisterHandler("CLEAR_ALL_WAYPOINT_MARKERS", function(player, data)
+    print("[Admin Handlers] CLEAR_ALL_WAYPOINT_MARKERS: Clearing all waypoint visualizations")
+    
+    -- Use the C++ method to properly clear tracking state and despawn markers
+    player:ClearAllWaypointVisualizations()
+    
+    print("[Admin Handlers] CLEAR_ALL_WAYPOINT_MARKERS: All visualizations cleared")
+    AMS.Send(player, "CLEAR_WAYPOINTS_RESPONSE", { success = true })
+end)
+
 -- ============================================================================
 -- Initialization
 -- ============================================================================
@@ -351,3 +380,5 @@ print("[Admin Handlers] Registered handlers:")
 print("  - GET_NPC_DATA")
 print("  - SHOW_WAYPOINTS")
 print("  - HIDE_WAYPOINTS")
+print("  - HIDE_WAYPOINTS_BY_GUID")
+print("  - CLEAR_ALL_WAYPOINT_MARKERS")

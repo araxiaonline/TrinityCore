@@ -16,6 +16,7 @@
 #include "NPCPackets.h"
 #include "PartyPackets.h"
 #include "Unit.h"
+#include "WaypointManager.h"
 #include <boost/callable_traits/args.hpp>
 
 /***
@@ -4259,6 +4260,17 @@ namespace LuaPlayer
     }
 #endif
 
+    /**
+     * Clears all waypoint visualizations tracked by the WaypointManager.
+     * This removes stale tracking state and despawns any remaining marker creatures.
+     * Useful for cleaning up after CLEAR_ALL_WAYPOINT_MARKERS or Eluna reload.
+     */
+    int ClearAllWaypointVisualizations(Eluna* E, Player* player)
+    {
+        sWaypointMgr->ClearAllVisualizations(player);
+        return 0;
+    }
+
     ElunaRegister<Player> PlayerMethods[] =
     {
         // Getters
@@ -4564,7 +4576,10 @@ namespace LuaPlayer
         { "ResetHonor", METHOD_REG_NONE }, // classic only
         { "ClearHonorInfo", METHOD_REG_NONE }, // classic only
         { "GainSpellComboPoints", METHOD_REG_NONE }, // not implemented
-        { "GossipMenuAddItemData", METHOD_REG_NONE } // not implemented
+        { "GossipMenuAddItemData", METHOD_REG_NONE }, // not implemented
+        
+        // Waypoint Visualization
+        { "ClearAllWaypointVisualizations", &LuaPlayer::ClearAllWaypointVisualizations }
     };
 };
 #endif

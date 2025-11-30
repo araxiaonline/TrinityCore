@@ -1,0 +1,12 @@
+## Interface: 110205
+## Title: Araxia Messaging System (Client)
+## Notes: Lightweight client-server messaging for Araxia Trinity Admin tools
+## Version: 1.0.0
+## Author: Araxia Online Team
+## SavedVariables: AMS_ClientDB
+
+# Dependencies
+Dep_Smallfolk\smallfolk.lua
+
+# Core
+AMS_Client.lua
