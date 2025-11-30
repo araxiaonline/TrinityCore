@@ -61,11 +61,7 @@ void RegisterServerTools()
                     {"seconds", static_cast<uint64>(uptime)},
                     {"formatted", uptimeStr.str()}
                 }},
-                {"serverTime", GameTime::GetGameTime()},
-                {"gameTime", {
-                    {"hour", sWorld->GetGameHour()},
-                    {"minute", (sWorld->GetGameTime() / MINUTE) % 60}
-                }}
+                {"serverTime", GameTime::GetGameTime()}
             };
         }
     );
