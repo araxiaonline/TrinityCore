@@ -14,6 +14,7 @@ target_include_directories(game
     ${CMAKE_CURRENT_SOURCE_DIR}/game
     ${CMAKE_CURRENT_SOURCE_DIR}/game/Entities
     ${CMAKE_CURRENT_SOURCE_DIR}/game/Entities/Creature
+    ${CMAKE_CURRENT_SOURCE_DIR}/mcp
 )
 
 # Add sources to the game target

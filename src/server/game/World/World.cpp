@@ -24,6 +24,7 @@
 #include "LuaEngine/ElunaMgr.h"
 #include "LuaEngine/ElunaConfig.h"
 #include "LuaEngine/ElunaLoader.h"
+#include "AraxiaMCPServer.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AreaTriggerDataStore.h"
@@ -186,6 +187,9 @@ Eluna* World::GetEluna() const
 /// World destructor
 World::~World()
 {
+    ///- Shutdown Araxia MCP Server
+    sMCPServer->Shutdown();
+
     ///- Empty the kicked session set
     while (!m_sessions.empty())
     {
@@ -2104,6 +2108,10 @@ bool World::SetInitialWorldSettings()
         _elunaInfo = std::make_unique<ElunaInfo>(ElunaInfoKey::MakeGlobalKey(0));
         sElunaMgr->Create(nullptr, *_elunaInfo);
     }
+
+    ///- Initialize Araxia MCP Server (AI assistant integration)
+    TC_LOG_INFO("server.loading", "Initializing Araxia MCP Server...");
+    sMCPServer->Initialize();
 
     uint32 startupDuration = GetMSTimeDiffToNow(startupBegin);
 
