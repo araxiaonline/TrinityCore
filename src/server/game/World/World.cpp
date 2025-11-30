@@ -2162,6 +2162,10 @@ void World::Update(uint32 diff)
 
     sWorldUpdateTime.UpdateWithDiff(diff);
 
+    ///- Update Eluna (process reload flag, timed events, async queries)
+    if (Eluna* e = GetEluna())
+        e->UpdateEluna(diff);
+
     ///- Update the different timers
     for (int i = 0; i < WUPDATE_COUNT; ++i)
     {
