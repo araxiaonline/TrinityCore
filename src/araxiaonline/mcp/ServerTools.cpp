@@ -146,18 +146,13 @@ void RegisterServerTools()
             TC_LOG_INFO("araxia.mcp", "[MCP] Executing GM command: .%s (player context: %s)", 
                         command.c_str(), playerName.empty() ? "none" : playerName.c_str());
             
-            // Find player session if specified
-            WorldSession* session = nullptr;
+            // Find player session if specified (for future ChatHandler integration)
+            // TODO: Implement proper command execution via ChatHandler
             if (!playerName.empty())
             {
                 Player* player = ObjectAccessor::FindPlayerByName(playerName);
-                if (player)
-                    session = player->GetSession();
+                (void)player; // Suppress unused warning until ChatHandler is implemented
             }
-            
-            // For commands that don't need a player, we can use console execution
-            // For now, log what would be executed
-            // TODO: Implement proper command execution via ChatHandler
             
             return {
                 {"success", true},
