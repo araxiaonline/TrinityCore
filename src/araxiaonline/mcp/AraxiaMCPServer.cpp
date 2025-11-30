@@ -42,11 +42,11 @@ bool MCPServer::Initialize()
         return true;
     
     // Load configuration
-    _port = sConfigMgr->GetOption<uint16>("Araxia.MCP.Port", 8765);
-    _authToken = sConfigMgr->GetOption<std::string>("Araxia.MCP.AuthToken", "");
-    _allowRemote = sConfigMgr->GetOption<bool>("Araxia.MCP.AllowRemote", false);
+    _port = static_cast<uint16>(sConfigMgr->GetIntDefault("Araxia.MCP.Port", 8765));
+    _authToken = sConfigMgr->GetStringDefault("Araxia.MCP.AuthToken", "");
+    _allowRemote = sConfigMgr->GetBoolDefault("Araxia.MCP.AllowRemote", false);
     
-    if (!sConfigMgr->GetOption<bool>("Araxia.MCP.Enable", false))
+    if (!sConfigMgr->GetBoolDefault("Araxia.MCP.Enable", false))
     {
         TC_LOG_INFO("araxia.mcp", "[MCP] Araxia MCP Server is disabled in config");
         return true;

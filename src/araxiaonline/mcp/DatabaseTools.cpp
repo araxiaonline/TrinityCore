@@ -26,7 +26,13 @@ json QueryResultToJson(QueryResult result)
     for (uint32 i = 0; i < fieldCount; ++i)
     {
         QueryResultFieldMetadata const& meta = result->GetFieldMetadata(i);
-        fieldNames.push_back(meta.Alias);
+        // Use Alias if available, otherwise Name, otherwise generic "field_N"
+        if (meta.Alias && meta.Alias[0])
+            fieldNames.push_back(meta.Alias);
+        else if (meta.Name && meta.Name[0])
+            fieldNames.push_back(meta.Name);
+        else
+            fieldNames.push_back("field_" + std::to_string(i));
     }
     
     do
@@ -42,35 +48,9 @@ json QueryResultToJson(QueryResult result)
             }
             else
             {
-                // Try to preserve types
-                switch (fields[i].GetType())
-                {
-                    case DatabaseFieldTypes::Int8:
-                    case DatabaseFieldTypes::Int16:
-                    case DatabaseFieldTypes::Int32:
-                        row[fieldNames[i]] = fields[i].GetInt32();
-                        break;
-                    case DatabaseFieldTypes::Int64:
-                        row[fieldNames[i]] = fields[i].GetInt64();
-                        break;
-                    case DatabaseFieldTypes::UInt8:
-                    case DatabaseFieldTypes::UInt16:
-                    case DatabaseFieldTypes::UInt32:
-                        row[fieldNames[i]] = fields[i].GetUInt32();
-                        break;
-                    case DatabaseFieldTypes::UInt64:
-                        row[fieldNames[i]] = fields[i].GetUInt64();
-                        break;
-                    case DatabaseFieldTypes::Float:
-                        row[fieldNames[i]] = fields[i].GetFloat();
-                        break;
-                    case DatabaseFieldTypes::Double:
-                        row[fieldNames[i]] = fields[i].GetDouble();
-                        break;
-                    default:
-                        row[fieldNames[i]] = fields[i].GetString();
-                        break;
-                }
+                // Get as string - JSON parser can handle conversion
+                // This is simpler and works across all field types
+                row[fieldNames[i]] = fields[i].GetString();
             }
         }
         rows.push_back(row);

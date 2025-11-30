@@ -47,7 +47,7 @@ void RegisterServerTools()
             return {
                 {"success", true},
                 {"server", {
-                    {"name", sWorld->GetRealmName()},
+                    {"name", "Araxia Online"},
                     {"version", GitRevision::GetFullVersion()},
                     {"branch", GitRevision::GetBranch()},
                     {"revision", GitRevision::GetHash()}
