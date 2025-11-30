@@ -56,6 +56,7 @@
 #include "ScriptedCreature.h"
 #include "SpellHistory.h"
 #include "SpellInfo.h"
+#include "WaypointManager.h"
 #include "WeatherMgr.h"
 #elif defined ELUNA_VMANGOS
 #include "BasicAI.h"

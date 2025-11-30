@@ -1468,6 +1468,335 @@ namespace LuaCreature
         return 0;
     }
 
+    // ============================================================================
+    // Araxia Custom Methods - Phase 2
+    // Safe accessors for combat stats and template data
+    // ============================================================================
+
+    /**
+     * Returns the [Creature]'s armor value.
+     * This is a safe accessor that won't crash on null data.
+     *
+     * @return uint32 armor : the armor value
+     */
+    int GetArmor(Eluna* E, Creature* creature)
+    {
+        E->Push(creature->GetArmor());
+        return 1;
+    }
+
+    /**
+     * Returns the [Creature]'s resistance for a specific spell school.
+     * Schools: 0=Physical, 1=Holy, 2=Fire, 3=Nature, 4=Frost, 5=Shadow, 6=Arcane
+     *
+     * @param uint32 school : the spell school (0-6)
+     * @return int32 resistance : the resistance value
+     */
+    int GetResistance(Eluna* E, Creature* creature)
+    {
+        uint32 school = E->CHECKVAL<uint32>(2);
+        if (school >= MAX_SPELL_SCHOOL)
+        {
+            E->Push(0);
+            return 1;
+        }
+        E->Push(creature->GetResistance(SpellSchools(school)));
+        return 1;
+    }
+
+    /**
+     * Returns the [Creature]'s base attack time for a weapon type.
+     * Types: 0=BASE_ATTACK, 1=OFF_ATTACK, 2=RANGED_ATTACK
+     *
+     * @param uint32 attackType : the weapon attack type (0-2), defaults to 0
+     * @return uint32 attackTime : the base attack time in milliseconds
+     */
+    int GetBaseAttackTime(Eluna* E, Creature* creature)
+    {
+        uint32 attackType = E->CHECKVAL<uint32>(2, 0);
+        if (attackType >= MAX_ATTACK)
+        {
+            E->Push(0);
+            return 1;
+        }
+        E->Push(creature->GetBaseAttackTime(WeaponAttackType(attackType)));
+        return 1;
+    }
+
+    /**
+     * Returns the [Creature]'s stat value.
+     * Stats: 0=Strength, 1=Agility, 2=Stamina, 3=Intellect, 4=Spirit
+     * This is a safe accessor with bounds checking.
+     *
+     * @param uint32 stat : the stat type (0-4)
+     * @return float statValue : the stat value
+     */
+    int GetStat(Eluna* E, Creature* creature)
+    {
+        uint32 stat = E->CHECKVAL<uint32>(2);
+        if (stat >= MAX_STATS)
+        {
+            E->Push(0.0f);
+            return 1;
+        }
+        E->Push(creature->GetStat(Stats(stat)));
+        return 1;
+    }
+
+    /**
+     * Visualizes the [Creature]'s waypoint path by spawning marker creatures at each node.
+     * Only visible to GMs. Call DevisualizeWaypointPath() to remove.
+     *
+     * @param uint32 displayId = nil : optional display ID for the markers
+     * @return bool success : true if visualization was created
+     */
+    int VisualizeWaypointPath(Eluna* E, Creature* creature)
+    {
+        uint32 pathId = creature->GetWaypointPathId();
+        if (pathId == 0)
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        WaypointPath const* path = sWaypointMgr->GetPath(pathId);
+        if (!path || path->Nodes.empty())
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        // Optional display ID parameter
+        Optional<uint32> displayId;
+        if (!lua_isnoneornil(E->L, 2))
+        {
+            displayId = E->CHECKVAL<uint32>(2);
+        }
+        
+        sWaypointMgr->VisualizePath(creature, path, displayId);
+        E->Push(true);
+        return 1;
+    }
+    
+    /**
+     * Removes waypoint visualization markers for the [Creature]'s path.
+     *
+     * @return bool success : true if devisualization was performed
+     */
+    int DevisualizeWaypointPath(Eluna* E, Creature* creature)
+    {
+        uint32 pathId = creature->GetWaypointPathId();
+        if (pathId == 0)
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        WaypointPath const* path = sWaypointMgr->GetPath(pathId);
+        if (!path)
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        sWaypointMgr->DevisualizePath(creature, path);
+        E->Push(true);
+        return 1;
+    }
+
+    /**
+     * Returns a table containing the [Creature]'s waypoint path data.
+     * Includes path info and all waypoint nodes.
+     *
+     * @return table waypointData : table with path info and nodes, or nil if no path
+     */
+    int GetWaypointPathData(Eluna* E, Creature* creature)
+    {
+        uint32 pathId = creature->GetWaypointPathId();
+        if (pathId == 0)
+        {
+            E->Push();  // Push nil
+            return 1;
+        }
+        
+        WaypointPath const* path = sWaypointMgr->GetPath(pathId);
+        if (!path || path->Nodes.empty())
+        {
+            E->Push();  // Push nil
+            return 1;
+        }
+        
+        lua_State* L = E->L;
+        lua_newtable(L);
+        
+        // Path info
+        lua_pushstring(L, "pathId");
+        lua_pushnumber(L, path->Id);
+        lua_settable(L, -3);
+        
+        lua_pushstring(L, "nodeCount");
+        lua_pushnumber(L, path->Nodes.size());
+        lua_settable(L, -3);
+        
+        lua_pushstring(L, "moveType");
+        lua_pushnumber(L, static_cast<uint8>(path->MoveType));
+        lua_settable(L, -3);
+        
+        // Current waypoint info
+        auto [currentNodeId, currentPathId] = creature->GetCurrentWaypointInfo();
+        lua_pushstring(L, "currentNodeId");
+        lua_pushnumber(L, currentNodeId);
+        lua_settable(L, -3);
+        
+        // Nodes array
+        lua_pushstring(L, "nodes");
+        lua_newtable(L);
+        
+        int nodeIndex = 1;
+        for (WaypointNode const& node : path->Nodes)
+        {
+            lua_pushnumber(L, nodeIndex++);
+            lua_newtable(L);
+            
+            lua_pushstring(L, "id");
+            lua_pushnumber(L, node.Id);
+            lua_settable(L, -3);
+            
+            lua_pushstring(L, "x");
+            lua_pushnumber(L, node.X);
+            lua_settable(L, -3);
+            
+            lua_pushstring(L, "y");
+            lua_pushnumber(L, node.Y);
+            lua_settable(L, -3);
+            
+            lua_pushstring(L, "z");
+            lua_pushnumber(L, node.Z);
+            lua_settable(L, -3);
+            
+            if (node.Delay)
+            {
+                lua_pushstring(L, "delay");
+                lua_pushnumber(L, node.Delay->count());
+                lua_settable(L, -3);
+            }
+            
+            lua_settable(L, -3);  // Add node to nodes table
+        }
+        lua_settable(L, -3);  // Add nodes table to main table
+        
+        return 1;
+    }
+
+    /**
+     * Returns a table containing the [Creature]'s template data.
+     * This provides access to all creature_template fields.
+     *
+     * @return table templateData : table with template fields
+     */
+    int GetCreatureTemplateData(Eluna* E, Creature* creature)
+    {
+        CreatureTemplate const* cTemplate = creature->GetCreatureTemplate();
+        if (!cTemplate)
+        {
+            E->Push();  // Push nil
+            return 1;
+        }
+
+        lua_State* L = E->L;
+        lua_newtable(L);
+
+        // Helper macro to set table fields
+        #define SET_NUMBER(key, value) \
+            lua_pushstring(L, key); \
+            lua_pushnumber(L, static_cast<lua_Number>(value)); \
+            lua_settable(L, -3)
+
+        #define SET_STRING(key, value) \
+            lua_pushstring(L, key); \
+            lua_pushstring(L, value.c_str()); \
+            lua_settable(L, -3)
+
+        #define SET_BOOL(key, value) \
+            lua_pushstring(L, key); \
+            lua_pushboolean(L, value ? 1 : 0); \
+            lua_settable(L, -3)
+
+        // Basic info
+        SET_NUMBER("entry", cTemplate->Entry);
+        SET_STRING("name", cTemplate->Name);
+        SET_STRING("subName", cTemplate->SubName);
+        SET_STRING("iconName", cTemplate->IconName);
+        
+        // Flags
+        SET_NUMBER("npcFlags", cTemplate->npcflag);
+        SET_NUMBER("unitFlags", cTemplate->unit_flags);
+        SET_NUMBER("unitFlags2", cTemplate->unit_flags2);
+        SET_NUMBER("unitFlags3", cTemplate->unit_flags3);
+        SET_NUMBER("extraFlags", cTemplate->flags_extra);
+        
+        // Type info
+        SET_NUMBER("type", cTemplate->type);
+        SET_NUMBER("family", static_cast<uint32>(cTemplate->family));
+        SET_NUMBER("unitClass", cTemplate->unit_class);
+        SET_NUMBER("faction", cTemplate->faction);
+        
+        // Combat
+        SET_NUMBER("baseAttackTime", cTemplate->BaseAttackTime);
+        SET_NUMBER("rangeAttackTime", cTemplate->RangeAttackTime);
+        SET_NUMBER("baseVariance", cTemplate->BaseVariance);
+        SET_NUMBER("rangeVariance", cTemplate->RangeVariance);
+        SET_NUMBER("dmgSchool", cTemplate->dmgschool);
+        
+        // Movement
+        SET_NUMBER("speedWalk", cTemplate->speed_walk);
+        SET_NUMBER("speedRun", cTemplate->speed_run);
+        SET_NUMBER("scale", cTemplate->scale);
+        SET_NUMBER("movementType", cTemplate->MovementType);
+        
+        // AI
+        SET_STRING("aiName", cTemplate->AIName);
+        SET_NUMBER("scriptId", cTemplate->ScriptID);
+        
+        // Misc
+        SET_NUMBER("vehicleId", cTemplate->VehicleId);
+        SET_BOOL("regenHealth", cTemplate->RegenHealth);
+        SET_BOOL("racialLeader", cTemplate->RacialLeader);
+        SET_NUMBER("modExperience", cTemplate->ModExperience);
+        SET_NUMBER("requiredExpansion", cTemplate->RequiredExpansion);
+
+        #undef SET_NUMBER
+        #undef SET_STRING
+        #undef SET_BOOL
+        
+        // Base resistances from template
+        lua_pushstring(L, "resistances");
+        lua_newtable(L);
+        for (int i = 0; i < MAX_SPELL_SCHOOL; ++i)
+        {
+            lua_pushinteger(L, i);
+            lua_pushinteger(L, cTemplate->resistance[i]);
+            lua_settable(L, -3);
+        }
+        lua_settable(L, -3);
+        
+        // Spells
+        lua_pushstring(L, "spells");
+        lua_newtable(L);
+        for (int i = 0; i < MAX_CREATURE_SPELLS; ++i)
+        {
+            if (cTemplate->spells[i] != 0)
+            {
+                lua_pushinteger(L, i + 1);
+                lua_pushinteger(L, cTemplate->spells[i]);
+                lua_settable(L, -3);
+            }
+        }
+        lua_settable(L, -3);
+
+        return 1;
+    }
+
     ElunaRegister<Creature> CreatureMethods[] =
     {
         // Getters
@@ -1503,6 +1832,16 @@ namespace LuaCreature
         { "GetLootRecipientGroup", METHOD_REG_NONE },
         { "GetShieldBlockValue", METHOD_REG_NONE },
 #endif
+
+        // Araxia Custom Methods - Phase 2
+        { "GetArmor", &LuaCreature::GetArmor },
+        { "GetResistance", &LuaCreature::GetResistance },
+        { "GetBaseAttackTime", &LuaCreature::GetBaseAttackTime },
+        { "GetStat", &LuaCreature::GetStat },
+        { "GetCreatureTemplateData", &LuaCreature::GetCreatureTemplateData },
+        { "GetWaypointPathData", &LuaCreature::GetWaypointPathData },
+        { "VisualizeWaypointPath", &LuaCreature::VisualizeWaypointPath },
+        { "DevisualizeWaypointPath", &LuaCreature::DevisualizeWaypointPath },
 
         // Setters
         { "SetRegeneratingHealth", &LuaCreature::SetRegeneratingHealth },

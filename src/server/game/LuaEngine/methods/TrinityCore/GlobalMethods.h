@@ -8,6 +8,8 @@
 #define GLOBALMETHODS_H
 
 #include "BindingMap.h"
+#include "ElunaSharedData.h"
+#include "lmarshal.h"
 
 /***
  * These functions can be used anywhere at any time, including at start-up.
@@ -3271,6 +3273,100 @@ namespace LuaGlobalFunctions
         return 0;
     }
 
+    /**
+     * Sets a shared data string accessible from all Eluna states.
+     * Enables cross-state communication for features like message reassembly.
+     * NOTE: Value must be a string. Use Smallfolk to serialize tables in Lua.
+     *
+     * @param string key : unique identifier for the data
+     * @param string value : string value to store
+     */
+    int SetSharedData(Eluna* E)
+    {
+        const char* key = E->CHECKVAL<const char*>(1);
+        const char* value = E->CHECKVAL<const char*>(2);
+        
+        sElunaSharedData->Set(std::string(key), std::string(value));
+        return 0;
+    }
+
+    /**
+     * Gets a shared data string accessible from all Eluna states.
+     *
+     * @param string key : unique identifier for the data
+     * @return string value : the stored string, or nil if not found
+     */
+    int GetSharedData(Eluna* E)
+    {
+        const char* key = E->CHECKVAL<const char*>(1);
+        
+        std::string value;
+        if (!sElunaSharedData->Get(std::string(key), value))
+        {
+            E->Push();  // Push nil
+            return 1;
+        }
+        
+        E->Push(value);
+        return 1;
+    }
+
+    /**
+     * Clears a shared data value.
+     *
+     * @param string key : unique identifier for the data to clear
+     */
+    int ClearSharedData(Eluna* E)
+    {
+        const char* key = E->CHECKVAL<const char*>(1);
+        sElunaSharedData->Clear(key);
+        return 0;
+    }
+
+    /**
+     * Checks if a shared data key exists.
+     *
+     * @param string key : unique identifier to check
+     * @return bool exists : true if the key exists
+     */
+    int HasSharedData(Eluna* E)
+    {
+        const char* key = E->CHECKVAL<const char*>(1);
+        E->Push(sElunaSharedData->Has(key));
+        return 1;
+    }
+
+    /**
+     * Clears all shared data.
+     * Use with caution - affects all Eluna states!
+     */
+    int ClearAllSharedData(Eluna* /*E*/)
+    {
+        sElunaSharedData->ClearAll();
+        return 0;
+    }
+
+    /**
+     * Gets all shared data keys.
+     * Useful for debugging cross-state data.
+     *
+     * @return table keys : array of all key names
+     */
+    int GetSharedDataKeys(Eluna* E)
+    {
+        lua_State* L = E->L;
+        std::vector<std::string> keys = sElunaSharedData->GetKeys();
+        
+        lua_createtable(L, keys.size(), 0);
+        for (size_t i = 0; i < keys.size(); ++i)
+        {
+            lua_pushstring(L, keys[i].c_str());
+            lua_rawseti(L, -2, i + 1);
+        }
+        
+        return 1;
+    }
+
     ElunaRegister<> GlobalMethods[] =
     {
         // Hooks
@@ -3395,7 +3491,15 @@ namespace LuaGlobalFunctions
         { "CreateInt64", &LuaGlobalFunctions::CreateLongLong },
         { "CreateUint64", &LuaGlobalFunctions::CreateULongLong },
         { "StartGameEvent", &LuaGlobalFunctions::StartGameEvent },
-        { "StopGameEvent", &LuaGlobalFunctions::StopGameEvent }
+        { "StopGameEvent", &LuaGlobalFunctions::StopGameEvent },
+
+        // Shared Data (cross-state communication)
+        { "SetSharedData", &LuaGlobalFunctions::SetSharedData },
+        { "GetSharedData", &LuaGlobalFunctions::GetSharedData },
+        { "ClearSharedData", &LuaGlobalFunctions::ClearSharedData },
+        { "HasSharedData", &LuaGlobalFunctions::HasSharedData },
+        { "ClearAllSharedData", &LuaGlobalFunctions::ClearAllSharedData },
+        { "GetSharedDataKeys", &LuaGlobalFunctions::GetSharedDataKeys }
     };
 }
 #endif
