@@ -91,6 +91,24 @@ local function UpdateGMButton()
     end
 end
 
+-- Function to sync GM state from server
+local function SyncGMState()
+    if not AMS then return end
+    
+    -- Request current GM state from server
+    AMS.Send("GET_PLAYER_DATA", {})
+end
+
+-- Handler for player data response
+if AMS then
+    AMS.RegisterHandler("PLAYER_DATA_RESPONSE", function(data)
+        if data and data.success and data.isGM ~= nil then
+            _G.AraxiaTrinityAdminGMMode = data.isGM
+            UpdateGMButton()
+        end
+    end)
+end
+
 gmButton:SetScript("OnClick", function()
     -- Toggle GM mode
     _G.AraxiaTrinityAdminGMMode = not _G.AraxiaTrinityAdminGMMode
@@ -116,6 +134,14 @@ gmButton:SetScript("OnLeave", function()
 end)
 
 UpdateGMButton()
+
+-- Sync GM state on panel show
+npcPanel:HookScript("OnShow", function()
+    SyncGMState()
+end)
+
+-- Initial sync
+SyncGMState()
 
 -- ============================================================================
 -- Tab Buttons
@@ -385,17 +411,260 @@ local waypointContent = CreateFrame("Frame", nil, rightContentFrame)
 waypointContent:SetAllPoints(rightContentFrame)
 waypointContent:Hide()
 
-local waypointTitle = waypointContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-waypointTitle:SetPoint("TOP", waypointContent, "TOP", 0, -8)
-waypointTitle:SetText("Waypoint Editor")
+-- Waypoint data storage
+local currentWaypointPathId = nil
+local currentWaypointNodes = {}
+local selectedWaypointNodeId = nil
+local panelLockedToNPC = false  -- Lock panel to NPC when showing waypoints
 
--- Waypoint info text area
-local waypointInfoText = waypointContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-waypointInfoText:SetPoint("TOPLEFT", waypointContent, "TOPLEFT", 12, -35)
-waypointInfoText:SetPoint("TOPRIGHT", waypointContent, "TOPRIGHT", -12, -35)
-waypointInfoText:SetJustifyH("LEFT")
-waypointInfoText:SetJustifyV("TOP")
-waypointInfoText:SetText("|cFF888888No creature selected.|r\n\nSelect a creature to view waypoint options.")
+-- Waypoint list (top half - 60% of height)
+local waypointListContainer = CreateFrame("Frame", nil, waypointContent)
+waypointListContainer:SetPoint("TOPLEFT", waypointContent, "TOPLEFT", 8, -8)
+waypointListContainer:SetPoint("RIGHT", waypointContent, "RIGHT", -8, 0)
+waypointListContainer:SetHeight(200)
+
+local waypointListScroll = CreateFrame("ScrollFrame", nil, waypointListContainer, "UIPanelScrollFrameTemplate")
+waypointListScroll:SetPoint("TOPLEFT", waypointListContainer, "TOPLEFT", 0, 0)
+waypointListScroll:SetPoint("BOTTOMRIGHT", waypointListContainer, "BOTTOMRIGHT", -22, 0)
+
+local waypointListChild = CreateFrame("Frame", nil, waypointListScroll)
+waypointListChild:SetWidth(280)
+waypointListChild:SetHeight(100)
+waypointListScroll:SetScrollChild(waypointListChild)
+
+-- Divider line between list and detail
+local waypointDivider = waypointContent:CreateTexture(nil, "ARTWORK")
+waypointDivider:SetHeight(1)
+waypointDivider:SetPoint("TOPLEFT", waypointListContainer, "BOTTOMLEFT", 0, -4)
+waypointDivider:SetPoint("RIGHT", waypointContent, "RIGHT", -8, 0)
+waypointDivider:SetColorTexture(0.4, 0.4, 0.4, 0.8)
+
+-- Detail panel (bottom half - always visible when waypoint selected)
+local waypointDetailPanel = CreateFrame("Frame", nil, waypointContent, "BackdropTemplate")
+waypointDetailPanel:SetPoint("TOPLEFT", waypointDivider, "BOTTOMLEFT", 0, -4)
+waypointDetailPanel:SetPoint("BOTTOMRIGHT", waypointContent, "BOTTOMRIGHT", -8, 8)
+waypointDetailPanel:SetBackdrop({
+    bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+    edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 12,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 }
+})
+waypointDetailPanel:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
+waypointDetailPanel:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+-- Detail panel content
+local detailTitle = waypointDetailPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+detailTitle:SetPoint("TOPLEFT", waypointDetailPanel, "TOPLEFT", 10, -8)
+detailTitle:SetText("Select a waypoint above")
+
+-- Detail info text
+local detailInfoText = waypointDetailPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+detailInfoText:SetPoint("TOPLEFT", waypointDetailPanel, "TOPLEFT", 10, -26)
+detailInfoText:SetPoint("RIGHT", waypointDetailPanel, "RIGHT", -80, 0)
+detailInfoText:SetJustifyH("LEFT")
+detailInfoText:SetJustifyV("TOP")
+detailInfoText:SetText("")
+
+-- Action buttons container (right side of detail panel)
+local detailActionsContainer = CreateFrame("Frame", nil, waypointDetailPanel)
+detailActionsContainer:SetPoint("TOPRIGHT", waypointDetailPanel, "TOPRIGHT", -8, -8)
+detailActionsContainer:SetSize(65, 100)
+
+-- Teleport button
+local teleportBtn = CreateFrame("Button", nil, detailActionsContainer, "UIPanelButtonTemplate")
+teleportBtn:SetSize(60, 22)
+teleportBtn:SetPoint("TOP", detailActionsContainer, "TOP", 0, 0)
+teleportBtn:SetText("Teleport")
+teleportBtn:Disable()
+
+teleportBtn:SetScript("OnClick", function()
+    if not selectedWaypointNodeId or not currentWaypointPathId then return end
+    
+    -- Find the selected node data
+    local node = nil
+    for _, n in ipairs(currentWaypointNodes) do
+        if n.id == selectedWaypointNodeId then
+            node = n
+            break
+        end
+    end
+    
+    if node and AMS then
+        print("|cFF00FF00[ATA]|r Teleporting to waypoint " .. node.id)
+        AMS.Send("TELEPORT_TO_WAYPOINT", {
+            x = node.x,
+            y = node.y,
+            z = node.z,
+            orientation = node.orientation
+        })
+    end
+end)
+
+teleportBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:AddLine("Teleport to Waypoint", 1, 1, 1)
+    GameTooltip:AddLine("Teleports you to this waypoint location", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+
+teleportBtn:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+-- Buttons to hold waypoint node entries
+local waypointNodeButtons = {}
+
+-- Forward declare functions
+local UpdateWaypointList
+local UpdateWaypointDetail
+
+-- Function to update waypoint detail display
+UpdateWaypointDetail = function()
+    if not selectedWaypointNodeId then
+        detailTitle:SetText("Select a waypoint above")
+        detailInfoText:SetText("")
+        teleportBtn:Disable()
+        return
+    end
+    
+    local node = nil
+    for _, n in ipairs(currentWaypointNodes) do
+        if n.id == selectedWaypointNodeId then
+            node = n
+            break
+        end
+    end
+    
+    if not node then 
+        teleportBtn:Disable()
+        return 
+    end
+    
+    detailTitle:SetText("Node " .. node.id)
+    
+    local detailStr = string.format(
+        "|cFFFFD700Position:|r %.1f, %.1f, %.1f\n" ..
+        "|cFFFFD700Orientation:|r %.2f\n" ..
+        "|cFFFFD700Delay:|r %dms\n" ..
+        "|cFFFFD700Move Type:|r %d",
+        node.x, node.y, node.z,
+        node.orientation,
+        node.delay,
+        node.moveType
+    )
+    
+    detailInfoText:SetText(detailStr)
+    teleportBtn:Enable()
+end
+
+-- Function to update waypoint list display
+UpdateWaypointList = function()
+    print("|cFF00FF00[ATA]|r UpdateWaypointList called: pathId=" .. (currentWaypointPathId or 0) .. ", nodes=" .. #currentWaypointNodes)
+    
+    -- Hide all existing buttons
+    for _, btn in ipairs(waypointNodeButtons) do
+        btn:Hide()
+    end
+    
+    if not currentWaypointPathId or #currentWaypointNodes == 0 then
+        -- Show empty message
+        print("|cFFFF0000[ATA]|r No waypoint data to display")
+        waypointListChild:SetHeight(40)
+        return
+    end
+    
+    -- Create/update buttons for each node
+    for i, node in ipairs(currentWaypointNodes) do
+        local btn = waypointNodeButtons[i]
+        if not btn then
+            btn = CreateFrame("Button", nil, waypointListChild)
+            btn:SetHeight(24)
+            btn:EnableMouse(true)
+            btn:RegisterForClicks("AnyUp")
+            btn:SetHighlightTexture("Interface/QuestFrame/UI-QuestTitleHighlight", "ADD")
+            
+            btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+            btn.bg:SetAllPoints()
+            btn.bg:SetColorTexture(0.2, 0.2, 0.2, 0.5)
+            
+            btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            btn.text:SetPoint("LEFT", btn, "LEFT", 8, 0)
+            btn.text:SetJustifyH("LEFT")
+            
+            btn:SetScript("OnClick", function(self)
+                local clickedNode = self.nodeData
+                if not clickedNode then return end
+                
+                selectedWaypointNodeId = clickedNode.id
+                UpdateWaypointDetail()
+                UpdateWaypointList()  -- Refresh to show selection highlight
+                
+                -- Send SELECT_WAYPOINT to server to highlight in world
+                if AMS and currentWaypointPathId then
+                    print("|cFF00FF00[ATA]|r Sending SELECT_WAYPOINT: path=" .. currentWaypointPathId .. " node=" .. clickedNode.id)
+                    AMS.Send("SELECT_WAYPOINT", { pathId = currentWaypointPathId, nodeId = clickedNode.id })
+                end
+            end)
+            
+            waypointNodeButtons[i] = btn
+        end
+        
+        btn.nodeData = node
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", waypointListChild, "TOPLEFT", 0, -((i-1) * 26))
+        btn:SetPoint("RIGHT", waypointListChild, "RIGHT", 0, 0)
+        
+        -- Highlight selected node
+        if node.id == selectedWaypointNodeId then
+            btn.bg:SetColorTexture(0.3, 0.5, 0.3, 0.7)
+            btn.text:SetTextColor(1, 1, 1, 1)
+        else
+            btn.bg:SetColorTexture(0.2, 0.2, 0.2, 0.5)
+            btn.text:SetTextColor(1, 0.82, 0, 1)
+        end
+        
+        btn.text:SetText("Node " .. node.id)
+        btn:Show()
+    end
+    
+    -- Update scroll child size to fit all buttons
+    local totalHeight = #currentWaypointNodes * 26
+    waypointListChild:SetHeight(totalHeight)
+    print("|cFF00FF00[ATA]|r Set scroll child height to " .. totalHeight)
+end
+
+-- Deselect button no longer needed in split view layout
+-- (kept for code compatibility but hidden)
+
+-- Request waypoint details from server
+local function RequestWaypointDetails(pathId)
+    if not AMS then return end
+    
+    currentWaypointPathId = pathId
+    currentWaypointNodes = {}
+    selectedWaypointNodeId = nil
+    
+    AMS.Send("GET_WAYPOINT_DETAILS", { pathId = pathId })
+end
+
+-- Handler for waypoint details response
+if AMS then
+    AMS.RegisterHandler("WAYPOINT_DETAILS_RESPONSE", function(data)
+        if not data or not data.success then
+            print("|cFFFF0000[ATA]|r Failed to get waypoint details: " .. (data.error or "Unknown error"))
+            return
+        end
+        
+        print("|cFF00FF00[ATA]|r Received waypoint details: pathId=" .. (data.pathId or 0) .. ", nodes=" .. #(data.nodes or {}))
+        
+        currentWaypointPathId = data.pathId
+        currentWaypointNodes = data.nodes or {}
+        selectedWaypointNodeId = nil
+        
+        print("|cFF00FF00[ATA]|r Updating waypoint list with " .. #currentWaypointNodes .. " nodes")
+        UpdateWaypointList()
+    end)
+end
 
 -- Waypoint action buttons container
 local waypointButtonContainer = CreateFrame("Frame", nil, waypointContent)
@@ -1053,6 +1322,12 @@ function npcPanel:Update(requestServerData, forceRefresh)
             -- Enable waypoint button if creature has a waypoint path
             if data and data.movement and data.movement.waypointPath then
                 waypointButton:Enable()
+                
+                -- Auto-load waypoint details for the Waypoints tab
+                local pathId = data.movement.waypointPath.pathId
+                if pathId and pathId > 0 then
+                    RequestWaypointDetails(pathId)
+                end
             else
                 waypointButton:Disable()
             end
@@ -1072,40 +1347,8 @@ function npcPanel:Update(requestServerData, forceRefresh)
         npcModel:SetModel("interface/buttons/talktomequestionmark.m2")
     end
     
-    -- Update Waypoint tab content
-    if npcData then
-        local waypointLines = {}
-        table.insert(waypointLines, "|cFFFFD700" .. (npcData.name or "Unknown") .. "|r")
-        table.insert(waypointLines, "Entry: " .. (npcData.npcID or "?"))
-        table.insert(waypointLines, "")
-        
-        if serverData and serverData.movement and serverData.movement.waypointPath then
-            local wp = serverData.movement.waypointPath
-            local pathId = wp.pathId or 0
-            if pathId > 0 then
-                table.insert(waypointLines, "|cFF00FF00Has Waypoint Path|r")
-                table.insert(waypointLines, "Path ID: " .. pathId)
-                table.insert(waypointLines, "Nodes: " .. (wp.nodeCount or 0))
-                table.insert(waypointLines, "")
-                table.insert(waypointLines, "|cFF888888Use the 'Show Waypoints' button|r")
-                table.insert(waypointLines, "|cFF888888to visualize the path in 3D.|r")
-            else
-                table.insert(waypointLines, "|cFFFF8800No Waypoint Path|r")
-                table.insert(waypointLines, "")
-                table.insert(waypointLines, "|cFF888888This creature does not have|r")
-                table.insert(waypointLines, "|cFF888888a defined waypoint path.|r")
-            end
-        elseif isLoadingServerData then
-            table.insert(waypointLines, "|cFF888888Loading waypoint data...|r")
-        else
-            table.insert(waypointLines, "|cFF888888Server data not loaded.|r")
-            table.insert(waypointLines, "|cFF888888Click Refresh to load.|r")
-        end
-        
-        waypointInfoText:SetText(table.concat(waypointLines, "\n"))
-    else
-        waypointInfoText:SetText("|cFF888888No creature selected.|r\n\nSelect a creature to view waypoint options.")
-    end
+    -- Waypoint tab is now handled by the new list/detail UI
+    -- No additional update needed here
 end
 
 -- ============================================================================
@@ -1163,12 +1406,14 @@ waypointButton:SetScript("OnClick", function()
         print("|cFF00FF00[ATA]|r Hiding waypoint markers...")
         waypointButton:SetText("Working...")
         waypointButton:Disable()
+        panelLockedToNPC = false
         AMS.Send("HIDE_WAYPOINTS", { guid = npcData.guid })
     else
-        -- Show waypoints
+        -- Show waypoints and lock panel to this NPC
         print("|cFF00FF00[ATA]|r Spawning waypoint markers in 3D space...")
         waypointButton:SetText("Working...")
         waypointButton:Disable()
+        panelLockedToNPC = true  -- Lock panel to prevent target changes from unloading NPC data
         AMS.Send("SHOW_WAYPOINTS", { guid = npcData.guid })
     end
 end)
@@ -1198,6 +1443,11 @@ local function InitWaypointHandler()
                         nodeCount = pendingWaypointRequest.nodeCount
                     }
                     print("|cFF00FF00[ATA]|r Tracking path for: " .. pendingWaypointRequest.name)
+                    
+                    -- Request waypoint details for the Waypoints tab
+                    if data.pathId then
+                        RequestWaypointDetails(data.pathId)
+                    end
                 elseif pendingWaypointRequest.action == "hide" then
                     -- Remove from tracked paths
                     if trackedPaths[pendingWaypointRequest.guid] then
@@ -1223,6 +1473,19 @@ local updateFrame = CreateFrame("Frame")
 updateFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 updateFrame:SetScript("OnEvent", function()
     if npcPanel:IsShown() then
+        -- Check if targeting a waypoint marker (visual waypoint creature)
+        local targetGUID = UnitGUID("target")
+        if targetGUID and panelLockedToNPC then
+            -- Panel is locked to an NPC, check if we targeted a waypoint marker
+            local guidLow = tonumber(string.match(targetGUID, "Creature%-0%-0%-0%-(%d+)")) or 0
+            if guidLow > 0 and AMS then
+                -- Request waypoint info for this GUID
+                AMS.Send("GET_WAYPOINT_FOR_GUID", { guid = guidLow })
+                return  -- Don't update NPC panel
+            end
+        end
+        
+        -- Normal NPC targeting behavior
         serverData = nil
         isLoadingServerData = false
         
@@ -1240,9 +1503,39 @@ updateFrame:SetScript("OnEvent", function()
             currentTargetGUID = npcData and npcData.guid or nil
         end
         waypointButton:Disable()  -- Will be enabled by Update() if creature has waypoints
-        npcPanel:Update(true)
+        npcPanel:Update(true, true)  -- Request server data and force refresh from cache
     end
 end)
+
+-- Handler for waypoint selection response (with visual highlighting)
+if AMS then
+    AMS.RegisterHandler("WAYPOINT_SELECTED_RESPONSE", function(data)
+        if data and data.success then
+            print("|cFF00FF00[ATA]|r Waypoint selected: node " .. data.nodeId .. " at " .. data.x .. ", " .. data.y .. ", " .. data.z)
+            
+            -- The waypoint is already visualized as a creature marker in the world
+            -- The highlighting happens through the UI selection (green background on the button)
+            -- Future: Could add a spell effect or other visual indicator here
+        end
+    end)
+    
+    AMS.RegisterHandler("WAYPOINT_FOR_GUID_RESPONSE", function(data)
+        if data and data.success then
+            -- Select this waypoint in the Waypoints tab
+            selectedWaypointNodeId = data.nodeId
+            currentWaypointPathId = data.pathId
+            
+            -- Switch to Waypoints tab to show the detail
+            ShowRightTab("Waypoints")
+            
+            -- Update the display
+            UpdateWaypointList()
+            UpdateWaypointDetail()
+            
+            print("|cFF00FF00[ATA]|r Selected waypoint node " .. data.nodeId)
+        end
+    end)
+end
 
 -- ============================================================================
 -- Initialization

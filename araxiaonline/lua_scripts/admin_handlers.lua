@@ -13,6 +13,9 @@ if not AMS then
     return
 end
 
+-- Load Smallfolk for serialization (used by shared data)
+local Smallfolk = require("smallfolk")
+
 -- ============================================================================
 -- Helper Functions
 -- ============================================================================
@@ -371,6 +374,159 @@ AMS.RegisterHandler("CLEAR_ALL_WAYPOINT_MARKERS", function(player, data)
     AMS.Send(player, "CLEAR_WAYPOINTS_RESPONSE", { success = true })
 end)
 
+-- Get detailed waypoint data for a path
+AMS.RegisterHandler("GET_WAYPOINT_DETAILS", function(player, data)
+    if not data or not data.pathId then
+        print("[Admin Handlers] GET_WAYPOINT_DETAILS: No pathId provided")
+        AMS.Send(player, "WAYPOINT_DETAILS_RESPONSE", { success = false, error = "No pathId" })
+        return
+    end
+    
+    local pathId = data.pathId
+    print("[Admin Handlers] GET_WAYPOINT_DETAILS: Fetching details for path " .. pathId)
+    
+    -- Get the waypoint path using the C++ binding
+    local path = GetWaypointPath(pathId)
+    if not path or not path.nodes then
+        print("[Admin Handlers] GET_WAYPOINT_DETAILS: Path not found")
+        AMS.Send(player, "WAYPOINT_DETAILS_RESPONSE", { success = false, error = "Path not found" })
+        return
+    end
+    
+    print("[Admin Handlers] GET_WAYPOINT_DETAILS: Sending " .. #path.nodes .. " nodes")
+    AMS.Send(player, "WAYPOINT_DETAILS_RESPONSE", { 
+        success = true, 
+        pathId = pathId,
+        nodes = path.nodes
+    })
+end)
+
+-- Highlight a specific waypoint in the world
+AMS.RegisterHandler("SELECT_WAYPOINT", function(player, data)
+    if not data or not data.pathId or not data.nodeId then
+        print("[Admin Handlers] SELECT_WAYPOINT: Missing pathId or nodeId")
+        return
+    end
+    
+    local pathId = data.pathId
+    local nodeId = data.nodeId
+    print("[Admin Handlers] SELECT_WAYPOINT: Highlighting path " .. pathId .. " node " .. nodeId)
+    
+    -- Get the waypoint path
+    local path = GetWaypointPath(pathId)
+    if not path or not path.nodes then
+        print("[Admin Handlers] SELECT_WAYPOINT: Path not found")
+        return
+    end
+    
+    -- Find the node
+    local node = nil
+    for _, n in ipairs(path.nodes) do
+        if n.id == nodeId then
+            node = n
+            break
+        end
+    end
+    
+    if not node then
+        print("[Admin Handlers] SELECT_WAYPOINT: Node not found")
+        return
+    end
+    
+    -- Notify player of selection
+    print("[Admin Handlers] SELECT_WAYPOINT: Node " .. nodeId .. " at " .. node.x .. ", " .. node.y .. ", " .. node.z)
+    
+    -- Clear previous highlight if any (stored in shared data per player)
+    local playerKey = "waypoint_highlight_" .. tostring(player:GetGUIDLow())
+    local prevData = GetSharedData(playerKey)
+    if prevData then
+        local prev = Smallfolk.loads(prevData)
+        if prev and prev.pathId and prev.nodeId then
+            ClearWaypointMarkerAuras(player, prev.pathId, prev.nodeId)
+        end
+    end
+    
+    -- Highlight the new waypoint marker by changing its display
+    -- Display IDs to try: 17519 (red orb), 17188 (blue orb), 26754 (green flame), 11686 (purple crystal)
+    local highlightDisplayId = 17519  -- Red glowing orb - very visible
+    local success = HighlightWaypointMarker(player, pathId, nodeId, highlightDisplayId)
+    
+    if success then
+        print("[Admin Handlers] SELECT_WAYPOINT: Highlighted marker with displayId " .. highlightDisplayId)
+        -- Store current selection for later cleanup
+        SetSharedData(playerKey, Smallfolk.dumps({ pathId = pathId, nodeId = nodeId }))
+    else
+        print("[Admin Handlers] SELECT_WAYPOINT: Could not find marker to highlight")
+    end
+    
+    player:SendBroadcastMessage("Waypoint " .. nodeId .. " selected")
+    
+    -- Send response with node position
+    AMS.Send(player, "WAYPOINT_SELECTED_RESPONSE", {
+        success = true,
+        pathId = pathId,
+        nodeId = nodeId,
+        x = node.x,
+        y = node.y,
+        z = node.z
+    })
+end)
+
+-- Get waypoint node info from a visual waypoint GUID (when targeting a waypoint marker)
+AMS.RegisterHandler("GET_WAYPOINT_FOR_GUID", function(player, data)
+    if not data or not data.guid then
+        print("[Admin Handlers] GET_WAYPOINT_FOR_GUID: No GUID provided")
+        return
+    end
+    
+    local pathId, nodeId = GetWaypointNodeForVisualGUID(data.guid)
+    if pathId == 0 or nodeId == 0 then
+        print("[Admin Handlers] GET_WAYPOINT_FOR_GUID: GUID not found in waypoint system")
+        AMS.Send(player, "WAYPOINT_FOR_GUID_RESPONSE", { success = false })
+        return
+    end
+    
+    print("[Admin Handlers] GET_WAYPOINT_FOR_GUID: Found path " .. pathId .. " node " .. nodeId)
+    AMS.Send(player, "WAYPOINT_FOR_GUID_RESPONSE", {
+        success = true,
+        pathId = pathId,
+        nodeId = nodeId
+    })
+end)
+
+-- Get player data (GM state, etc.)
+AMS.RegisterHandler("GET_PLAYER_DATA", function(player, data)
+    if not player then
+        return
+    end
+    
+    -- Send player data including GM state (IsGM is the correct Eluna method)
+    AMS.Send(player, "PLAYER_DATA_RESPONSE", {
+        success = true,
+        isGM = player:IsGM()
+    })
+end)
+
+-- Teleport player to a waypoint location
+AMS.RegisterHandler("TELEPORT_TO_WAYPOINT", function(player, data)
+    if not data or not data.x or not data.y or not data.z then
+        print("[Admin Handlers] TELEPORT_TO_WAYPOINT: Missing coordinates")
+        return
+    end
+    
+    local x = data.x
+    local y = data.y
+    local z = data.z
+    local orientation = data.orientation or 0
+    
+    print("[Admin Handlers] TELEPORT_TO_WAYPOINT: Teleporting to " .. x .. ", " .. y .. ", " .. z .. " facing " .. orientation)
+    
+    -- Teleport player to the waypoint location with correct orientation
+    player:Teleport(player:GetMapId(), x, y, z, orientation)
+    
+    player:SendBroadcastMessage("Teleported to waypoint")
+end)
+
 -- ============================================================================
 -- Initialization
 -- ============================================================================
@@ -382,3 +538,8 @@ print("  - SHOW_WAYPOINTS")
 print("  - HIDE_WAYPOINTS")
 print("  - HIDE_WAYPOINTS_BY_GUID")
 print("  - CLEAR_ALL_WAYPOINT_MARKERS")
+print("  - GET_WAYPOINT_DETAILS")
+print("  - SELECT_WAYPOINT")
+print("  - GET_WAYPOINT_FOR_GUID")
+print("  - GET_PLAYER_DATA")
+print("  - TELEPORT_TO_WAYPOINT")

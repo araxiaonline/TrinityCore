@@ -398,3 +398,14 @@ void WaypointPath::BuildSegments()
             ContinuousSegments.emplace_back(i, 1);
     }
 }
+
+bool WaypointMgr::GetPathAndNodeByVisualGUID(ObjectGuid guid, uint32& outPathId, uint32& outNodeId) const
+{
+    auto itr = _visualWaypointGUIDToNodeMap.find(guid);
+    if (itr == _visualWaypointGUIDToNodeMap.end())
+        return false;
+    
+    outPathId = itr->second.first->Id;
+    outNodeId = itr->second.second->Id;
+    return true;
+}

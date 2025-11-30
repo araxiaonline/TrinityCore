@@ -4265,7 +4265,7 @@ namespace LuaPlayer
      * This removes stale tracking state and despawns any remaining marker creatures.
      * Useful for cleaning up after CLEAR_ALL_WAYPOINT_MARKERS or Eluna reload.
      */
-    int ClearAllWaypointVisualizations(Eluna* E, Player* player)
+    int ClearAllWaypointVisualizations(Eluna* /*E*/, Player* player)
     {
         sWaypointMgr->ClearAllVisualizations(player);
         return 0;

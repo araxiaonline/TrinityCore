@@ -65,6 +65,9 @@ class TC_GAME_API WaypointMgr
         WaypointPath const* GetPathByVisualGUID(ObjectGuid guid) const;
         WaypointNode const* GetNodeByVisualGUID(ObjectGuid guid) const;
         ObjectGuid const& GetVisualGUIDByNode(uint32 pathId, uint32 nodeId) const;
+        
+        // Get path and node IDs from a visual waypoint GUID
+        bool GetPathAndNodeByVisualGUID(ObjectGuid guid, uint32& outPathId, uint32& outNodeId) const;
 
     private:
         WaypointMgr();

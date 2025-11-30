@@ -1806,7 +1806,7 @@ namespace LuaCreature
         // Spells
         lua_pushstring(L, "spells");
         lua_newtable(L);
-        for (int i = 0; i < MAX_CREATURE_SPELLS; ++i)
+        for (uint32 i = 0; i < MAX_CREATURE_SPELLS; ++i)
         {
             if (cTemplate->spells[i] != 0)
             {
