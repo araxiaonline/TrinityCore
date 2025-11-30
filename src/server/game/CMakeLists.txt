@@ -81,6 +81,9 @@ if(BUILD_SHARED_LIBS)
   endif()
 endif()
 
+# Add Araxia Online custom code
+add_subdirectory(${CMAKE_SOURCE_DIR}/src/araxiaonline ${CMAKE_BINARY_DIR}/araxiaonline)
+
 # Generate precompiled header
 if(USE_COREPCH)
   add_cxx_pch(game ${PRIVATE_PCH_HEADER})

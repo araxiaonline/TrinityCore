@@ -7,6 +7,10 @@
 #ifndef CREATUREMETHODS_H
 #define CREATUREMETHODS_H
 
+// Araxia Online - Custom write operations
+#include "AraxiaCreatureWriter.h"
+#include "ElunaSharedData.h"
+
 /***
  * Non-[Player] controlled [Unit]s (i.e. NPCs).
  *
@@ -1628,6 +1632,108 @@ namespace LuaCreature
     }
 
     /**
+     * Shows a visual marker at the [Creature]'s spawn/home position.
+     * The marker is a creature with the specified display ID (default: spawn point marker).
+     *
+     * @param [Player] phaseSource = nil : optional player to inherit phase from
+     * @param uint32 displayId = 31366 : display ID for the marker (default is green circle)
+     * @return Creature marker : the spawned marker creature, or nil on failure
+     */
+    int ShowSpawnPointMarker(Eluna* E, Creature* creature)
+    {
+        float x, y, z, o;
+        creature->GetHomePosition(x, y, z, o);
+        
+        // Optional player parameter for phase inheritance (arg 2)
+        Player* phaseSource = E->CHECKOBJ<Player>(2, false);
+        
+        // Display ID - default to green circle (31366) or specified
+        uint32 displayId = 31366;  // Green targeting circle
+        int displayIdArg = phaseSource ? 3 : 2;
+        if (!lua_isnoneornil(E->L, displayIdArg))
+        {
+            displayId = E->CHECKVAL<uint32>(displayIdArg);
+        }
+        
+        // First, hide any existing spawn marker for this creature
+        ObjectGuid::LowType spawnId = creature->GetSpawnId();
+        std::string markerKey = "spawn_marker_" + std::to_string(spawnId);
+        std::string existingCounter;
+        if (sElunaSharedData->Get(markerKey, existingCounter))
+        {
+            try {
+                ObjectGuid::LowType counter = std::stoull(existingCounter);
+                ObjectGuid oldGuid = ObjectGuid::Create<HighGuid::Creature>(creature->GetMapId(), VISUAL_WAYPOINT, counter);
+                if (Creature* oldMarker = ObjectAccessor::GetCreature(*creature, oldGuid))
+                {
+                    oldMarker->DespawnOrUnsummon();
+                }
+            } catch (...) {
+                // Ignore invalid stored GUID
+            }
+            sElunaSharedData->Clear(markerKey);
+        }
+        
+        // Use SummonCreature like waypoint visualization does (VISUAL_WAYPOINT = 1)
+        TempSummon* marker = creature->SummonCreature(VISUAL_WAYPOINT, x, y, z, o);
+        if (!marker)
+        {
+            E->Push();
+            return 1;
+        }
+        
+        // Set custom display
+        marker->SetDisplayId(displayId, true);
+        marker->SetObjectScale(1.5f);  // Make it visible
+        
+        // Inherit phase from player if provided
+        if (phaseSource)
+        {
+            PhasingHandler::InheritPhaseShift(marker, phaseSource);
+        }
+        
+        // Store marker's counter for later removal
+        sElunaSharedData->Set(markerKey, std::to_string(marker->GetGUID().GetCounter()));
+        
+        E->Push(marker);
+        return 1;
+    }
+
+    /**
+     * Hides/removes the spawn point marker for this [Creature].
+     *
+     * @return bool success : true if marker was removed
+     */
+    int HideSpawnPointMarker(Eluna* E, Creature* creature)
+    {
+        ObjectGuid::LowType spawnId = creature->GetSpawnId();
+        std::string markerKey = "spawn_marker_" + std::to_string(spawnId);
+        std::string counterStr;
+        
+        if (!sElunaSharedData->Get(markerKey, counterStr))
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        try {
+            ObjectGuid::LowType counter = std::stoull(counterStr);
+            ObjectGuid markerGuid = ObjectGuid::Create<HighGuid::Creature>(creature->GetMapId(), VISUAL_WAYPOINT, counter);
+            
+            if (Creature* marker = ObjectAccessor::GetCreature(*creature, markerGuid))
+            {
+                marker->DespawnOrUnsummon();
+            }
+        } catch (...) {
+            // Ignore invalid stored GUID
+        }
+        
+        sElunaSharedData->Clear(markerKey);
+        E->Push(true);
+        return 1;
+    }
+
+    /**
      * Returns a table containing the [Creature]'s waypoint path data.
      * Includes path info and all waypoint nodes.
      *
@@ -1820,6 +1926,74 @@ namespace LuaCreature
         return 1;
     }
 
+    // ========================================================================
+    // Araxia Online - Database Write Operations
+    // These methods persist changes to the database using AraxiaCreatureWriter
+    // ========================================================================
+
+    /**
+     * [Araxia] Saves the wander distance to the database for this creature spawn.
+     * This persists the change across server restarts.
+     * Only applies to creatures with MovementType = 1 (Random).
+     *
+     * @param float distance : the wander radius in yards (0-100)
+     * @param [Player] changedBy : optional player who made the change (for logging)
+     * @return bool success : true if the change was saved
+     * @return string message : result message
+     */
+    int SaveWanderDistance(Eluna* E, Creature* creature)
+    {
+        float distance = E->CHECKVAL<float>(2);
+        Player* changedBy = E->CHECKOBJ<Player>(3, false);
+        
+        ObjectGuid::LowType spawnId = creature->GetSpawnId();
+        if (spawnId == 0)
+        {
+            E->Push(false);
+            E->Push("Creature has no spawn ID (not a database spawn)");
+            return 2;
+        }
+        
+        Araxia::WriteResult result = sAraxiaCreatureWriter.SetWanderDistance(spawnId, distance, changedBy);
+        
+        // Also update the live creature's in-memory value
+        if (result.success)
+            creature->SetWanderDistance(distance);
+        
+        E->Push(result.success);
+        E->Push(result.message);
+        return 2;
+    }
+
+    /**
+     * [Araxia] Saves the movement type to the database for this creature spawn.
+     * This persists the change across server restarts.
+     *
+     * @param uint8 movementType : 0=Idle, 1=Random, 2=Waypoint
+     * @param [Player] changedBy : optional player who made the change (for logging)
+     * @return bool success : true if the change was saved
+     * @return string message : result message
+     */
+    int SaveMovementType(Eluna* E, Creature* creature)
+    {
+        uint8 movementType = E->CHECKVAL<uint8>(2);
+        Player* changedBy = E->CHECKOBJ<Player>(3, false);
+        
+        ObjectGuid::LowType spawnId = creature->GetSpawnId();
+        if (spawnId == 0)
+        {
+            E->Push(false);
+            E->Push("Creature has no spawn ID (not a database spawn)");
+            return 2;
+        }
+        
+        Araxia::WriteResult result = sAraxiaCreatureWriter.SetMovementType(spawnId, movementType, changedBy);
+        
+        E->Push(result.success);
+        E->Push(result.message);
+        return 2;
+    }
+
     ElunaRegister<Creature> CreatureMethods[] =
     {
         // Getters
@@ -1865,6 +2039,8 @@ namespace LuaCreature
         { "GetWaypointPathData", &LuaCreature::GetWaypointPathData },
         { "VisualizeWaypointPath", &LuaCreature::VisualizeWaypointPath },
         { "DevisualizeWaypointPath", &LuaCreature::DevisualizeWaypointPath },
+        { "ShowSpawnPointMarker", &LuaCreature::ShowSpawnPointMarker },
+        { "HideSpawnPointMarker", &LuaCreature::HideSpawnPointMarker },
 
         // Setters
         { "SetRegeneratingHealth", &LuaCreature::SetRegeneratingHealth },
@@ -1940,7 +2116,11 @@ namespace LuaCreature
         { "ResetAllThreat", &LuaCreature::ResetAllThreat },
         { "FixateTarget", &LuaCreature::FixateTarget },
         { "ClearFixate", &LuaCreature::ClearFixate },
-        { "RemoveFromWorld", &LuaCreature::RemoveFromWorld }
+        { "RemoveFromWorld", &LuaCreature::RemoveFromWorld },
+
+        // Araxia Online - Database Write Operations
+        { "SaveWanderDistance", &LuaCreature::SaveWanderDistance },
+        { "SaveMovementType", &LuaCreature::SaveMovementType }
     };
 };
 #endif

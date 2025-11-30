@@ -636,6 +636,382 @@ end
 -- Deselect button no longer needed in split view layout
 -- (kept for code compatibility but hidden)
 
+-- ============================================================================
+-- Wander Settings Content (shown for Random movement type instead of waypoints)
+-- ============================================================================
+
+local wanderSettingsContainer = CreateFrame("Frame", nil, waypointContent, "BackdropTemplate")
+wanderSettingsContainer:SetAllPoints(waypointContent)
+wanderSettingsContainer:SetBackdrop({
+    bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+    tile = true, tileSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 }
+})
+wanderSettingsContainer:SetBackdropColor(0.05, 0.05, 0.05, 0.5)
+wanderSettingsContainer:Hide()
+
+local wanderTitle = wanderSettingsContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+wanderTitle:SetPoint("TOP", wanderSettingsContainer, "TOP", 0, -15)
+wanderTitle:SetText("|cFFFFD700Random Movement Settings|r")
+
+local wanderDesc = wanderSettingsContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+wanderDesc:SetPoint("TOP", wanderTitle, "BOTTOM", 0, -10)
+wanderDesc:SetWidth(280)
+wanderDesc:SetJustifyH("CENTER")
+wanderDesc:SetText("This creature uses Random movement.\nAdjust the wander distance below:")
+
+-- Current wander distance display
+local wanderCurrentLabel = wanderSettingsContainer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+wanderCurrentLabel:SetPoint("TOPLEFT", wanderSettingsContainer, "TOPLEFT", 20, -90)
+wanderCurrentLabel:SetText("|cFF00FF00Current Wander Distance:|r")
+
+local wanderCurrentValue = wanderSettingsContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+wanderCurrentValue:SetPoint("LEFT", wanderCurrentLabel, "RIGHT", 8, 0)
+wanderCurrentValue:SetText("0 yards")
+
+-- Edit section
+local wanderEditLabel = wanderSettingsContainer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+wanderEditLabel:SetPoint("TOPLEFT", wanderCurrentLabel, "BOTTOMLEFT", 0, -20)
+wanderEditLabel:SetText("|cFF00FF00New Distance (yards):|r")
+
+local wanderEditBox = CreateFrame("EditBox", nil, wanderSettingsContainer, "InputBoxTemplate")
+wanderEditBox:SetSize(60, 24)
+wanderEditBox:SetPoint("LEFT", wanderEditLabel, "RIGHT", 10, 0)
+wanderEditBox:SetAutoFocus(false)
+wanderEditBox:SetNumeric(false)  -- Allow decimal input
+wanderEditBox:SetMaxLetters(6)
+wanderEditBox:SetText("5")
+
+-- Save button
+local wanderSaveBtn = CreateFrame("Button", nil, wanderSettingsContainer, "UIPanelButtonTemplate")
+wanderSaveBtn:SetSize(100, 26)
+wanderSaveBtn:SetPoint("TOPLEFT", wanderEditLabel, "BOTTOMLEFT", 0, -20)
+wanderSaveBtn:SetText("Save")
+-- Helper function to disable all wander setting buttons while waiting for server
+local function DisableWanderButtons()
+    wanderSaveBtn:Disable()
+    -- Other buttons will be defined below, we'll call this after they exist
+end
+
+-- Helper function to re-enable all wander setting buttons
+local function EnableWanderButtons()
+    wanderSaveBtn:Enable()
+    if spawnMarkerBtn then spawnMarkerBtn:Enable() end
+    if wanderRadiusBtn then wanderRadiusBtn:Enable() end
+    if clearAllBtn then clearAllBtn:Enable() end
+    if clearNearbyBtn then clearNearbyBtn:Enable() end
+end
+
+-- Forward declare buttons so DisableWanderButtons can reference them
+local spawnMarkerBtn, wanderRadiusBtn, clearAllBtn, clearNearbyBtn
+
+-- Update DisableWanderButtons to use the forward declarations
+DisableWanderButtons = function()
+    wanderSaveBtn:Disable()
+    if spawnMarkerBtn then spawnMarkerBtn:Disable() end
+    if wanderRadiusBtn then wanderRadiusBtn:Disable() end
+    if clearAllBtn then clearAllBtn:Disable() end
+    if clearNearbyBtn then clearNearbyBtn:Disable() end
+end
+
+-- Update EnableWanderButtons to use the forward declarations
+EnableWanderButtons = function()
+    wanderSaveBtn:Enable()
+    if spawnMarkerBtn then spawnMarkerBtn:Enable() end
+    if wanderRadiusBtn then wanderRadiusBtn:Enable() end
+    if clearAllBtn then clearAllBtn:Enable() end
+    if clearNearbyBtn then clearNearbyBtn:Enable() end
+end
+
+wanderSaveBtn:SetScript("OnClick", function()
+    local newDistance = tonumber(wanderEditBox:GetText())
+    if not newDistance then
+        print("|cFFFF0000[ATA]|r Invalid distance value")
+        return
+    end
+    
+    if newDistance < 0 or newDistance > 100 then
+        print("|cFFFF0000[ATA]|r Distance must be between 0 and 100 yards")
+        return
+    end
+    
+    if AMS then
+        DisableWanderButtons()
+        AMS.Send("SET_WANDER_DISTANCE", { distance = newDistance })
+        print("|cFF00FF00[ATA]|r Saving wander distance: " .. newDistance)
+    end
+end)
+
+-- Spawn marker toggle button
+local spawnMarkerVisible = false
+spawnMarkerBtn = CreateFrame("Button", nil, wanderSettingsContainer, "UIPanelButtonTemplate")
+spawnMarkerBtn:SetSize(140, 26)
+spawnMarkerBtn:SetPoint("LEFT", wanderSaveBtn, "RIGHT", 10, 0)
+spawnMarkerBtn:SetText("Show Spawn Point")
+spawnMarkerBtn:SetScript("OnClick", function()
+    if AMS then
+        if spawnMarkerVisible then
+            AMS.Send("HIDE_SPAWN_MARKER", {})
+            spawnMarkerVisible = false
+            spawnMarkerBtn:SetText("Show Spawn Point")
+        else
+            AMS.Send("SHOW_SPAWN_MARKER", {})
+            spawnMarkerVisible = true
+            spawnMarkerBtn:SetText("Hide Spawn Point")
+        end
+    end
+end)
+spawnMarkerBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Spawn Point Marker", 1, 1, 1)
+    GameTooltip:AddLine("Shows a marker at this creature's", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("spawn/home position.", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+spawnMarkerBtn:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+-- Wander radius visualization button
+local wanderRadiusVisible = false
+wanderRadiusBtn = CreateFrame("Button", nil, wanderSettingsContainer, "UIPanelButtonTemplate")
+wanderRadiusBtn:SetSize(140, 26)
+wanderRadiusBtn:SetPoint("TOPLEFT", spawnMarkerBtn, "BOTTOMLEFT", 0, -5)
+wanderRadiusBtn:SetText("Show Radius")
+wanderRadiusBtn:SetScript("OnClick", function()
+    if AMS then
+        if wanderRadiusVisible then
+            AMS.Send("HIDE_WANDER_RADIUS", {})
+            wanderRadiusVisible = false
+            wanderRadiusBtn:SetText("Show Radius")
+        else
+            AMS.Send("SHOW_WANDER_RADIUS", { segments = 16 })
+            wanderRadiusVisible = true
+            wanderRadiusBtn:SetText("Hide Radius")
+        end
+    end
+end)
+wanderRadiusBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Wander Radius Visualization", 1, 1, 1)
+    GameTooltip:AddLine("Shows markers in a circle around", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("the spawn point at the wander", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("distance to visualize the area.", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+wanderRadiusBtn:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+-- Clear All button - removes spawn marker and wander radius markers
+clearAllBtn = CreateFrame("Button", nil, wanderSettingsContainer, "UIPanelButtonTemplate")
+clearAllBtn:SetSize(140, 26)
+clearAllBtn:SetPoint("TOPLEFT", wanderRadiusBtn, "BOTTOMLEFT", 0, -5)
+clearAllBtn:SetText("Clear All Markers")
+clearAllBtn:SetScript("OnClick", function()
+    if AMS then
+        AMS.Send("CLEAR_WANDER_MARKERS", {})
+        -- Reset button states
+        spawnMarkerVisible = false
+        spawnMarkerBtn:SetText("Show Spawn Point")
+        wanderRadiusVisible = false
+        wanderRadiusBtn:SetText("Show Radius")
+    end
+end)
+clearAllBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Clear All Markers", 1, 1, 1)
+    GameTooltip:AddLine("Removes both spawn point marker", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("and wander radius markers.", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+clearAllBtn:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+-- Clear Nearby (orphaned) markers button
+clearNearbyBtn = CreateFrame("Button", nil, wanderSettingsContainer, "UIPanelButtonTemplate")
+clearNearbyBtn:SetSize(140, 26)
+clearNearbyBtn:SetPoint("TOPLEFT", clearAllBtn, "BOTTOMLEFT", 0, -5)
+clearNearbyBtn:SetText("Clear Orphaned")
+clearNearbyBtn:SetScript("OnClick", function()
+    if AMS then
+        AMS.Send("CLEAR_NEARBY_MARKERS", { range = 100 })
+    end
+end)
+clearNearbyBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Clear Orphaned Markers", 1, 0.5, 0)
+    GameTooltip:AddLine("Removes ALL waypoint markers within", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("100 yards of your character.", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine(" ", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("Use this to clean up markers that", 1, 1, 0)
+    GameTooltip:AddLine("were lost after a script reload.", 1, 1, 0)
+    GameTooltip:Show()
+end)
+clearNearbyBtn:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+-- Help text
+local wanderHelp = wanderSettingsContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+wanderHelp:SetPoint("BOTTOMLEFT", wanderSettingsContainer, "BOTTOMLEFT", 20, 20)
+wanderHelp:SetPoint("RIGHT", wanderSettingsContainer, "RIGHT", -20, 0)
+wanderHelp:SetJustifyH("LEFT")
+wanderHelp:SetText("|cFF888888Wander distance is the radius (in yards) the creature will\nrandomly move within from its spawn point.\nSet to 0 for no movement (idle).|r")
+
+-- Handler for spawn marker response
+if AMS then
+    AMS.RegisterHandler("SPAWN_MARKER_RESPONSE", function(data)
+        if data and data.success then
+            if data.message and data.message:find("shown") then
+                spawnMarkerVisible = true
+                spawnMarkerBtn:SetText("Hide Spawn Point")
+                print("|cFF00FF00[ATA]|r Spawn marker shown at " .. string.format("%.1f, %.1f, %.1f", data.x or 0, data.y or 0, data.z or 0))
+            else
+                spawnMarkerVisible = false
+                spawnMarkerBtn:SetText("Show Spawn Point")
+                print("|cFF00FF00[ATA]|r Spawn marker hidden")
+            end
+        else
+            print("|cFFFF0000[ATA]|r Spawn marker error: " .. (data.error or "Unknown error"))
+        end
+    end)
+end
+
+-- Handler for wander distance save response
+if AMS then
+    AMS.RegisterHandler("SET_WANDER_DISTANCE_RESPONSE", function(data)
+        EnableWanderButtons()
+        if data and data.success then
+            print("|cFF00FF00[ATA]|r Wander distance updated to " .. (data.newDistance or "?") .. " yards")
+            wanderCurrentValue:SetText(string.format("%.1f yards", data.newDistance or 0))
+            
+            -- Remember what markers were visible BEFORE we cleared them
+            local wasSpawnVisible = spawnMarkerVisible
+            local wasRadiusVisible = wanderRadiusVisible
+            
+            -- Reset button states since markers were hidden by the save
+            spawnMarkerVisible = false
+            spawnMarkerBtn:SetText("Show Spawn Point")
+            wanderRadiusVisible = false
+            wanderRadiusBtn:SetText("Show Radius")
+            
+            -- Schedule re-showing markers after creature respawns (2 seconds)
+            -- Only if they were visible before AND we still have same target
+            if wasSpawnVisible or wasRadiusVisible then
+                C_Timer.After(2, function()
+                    if AMS and UnitExists("target") then
+                        if wasSpawnVisible then
+                            AMS.Send("SHOW_SPAWN_MARKER", {})
+                            spawnMarkerVisible = true
+                            spawnMarkerBtn:SetText("Hide Spawn Point")
+                        end
+                        if wasRadiusVisible then
+                            AMS.Send("SHOW_WANDER_RADIUS", { segments = 16 })
+                            wanderRadiusVisible = true
+                            wanderRadiusBtn:SetText("Hide Radius")
+                        end
+                        print("|cFF00FF00[ATA]|r Markers refreshed at new location")
+                    else
+                        print("|cFFFFFF00[ATA]|r Target lost - markers not refreshed")
+                    end
+                end)
+            end
+        else
+            print("|cFFFF0000[ATA]|r Failed to update wander distance: " .. (data.message or "Unknown error"))
+        end
+    end)
+end
+
+-- Handler for wander radius visualization response
+if AMS then
+    AMS.RegisterHandler("WANDER_RADIUS_RESPONSE", function(data)
+        if data and data.success then
+            if data.message and data.message:find("shown") then
+                wanderRadiusVisible = true
+                wanderRadiusBtn:SetText("Hide Radius")
+                print("|cFF00FF00[ATA]|r " .. data.message .. " (" .. (data.markerCount or "?") .. " markers)")
+            else
+                wanderRadiusVisible = false
+                wanderRadiusBtn:SetText("Show Radius")
+                print("|cFF00FF00[ATA]|r Wander radius hidden")
+            end
+        else
+            print("|cFFFF0000[ATA]|r Wander radius error: " .. (data.error or "Unknown error"))
+        end
+    end)
+end
+
+-- Handler for clear all markers response
+if AMS then
+    AMS.RegisterHandler("CLEAR_WANDER_MARKERS_RESPONSE", function(data)
+        if data and data.success then
+            if data.cleared and data.cleared > 0 then
+                print("|cFF00FF00[ATA]|r " .. (data.message or "Markers cleared"))
+            else
+                print("|cFFFFFF00[ATA]|r " .. (data.message or "No markers found to clear"))
+            end
+        else
+            print("|cFFFF0000[ATA]|r Clear markers error: " .. (data.error or "Unknown error"))
+        end
+    end)
+end
+
+-- Handler for clear nearby orphaned markers response
+if AMS then
+    AMS.RegisterHandler("CLEAR_NEARBY_MARKERS_RESPONSE", function(data)
+        if data and data.success then
+            if data.cleared and data.cleared > 0 then
+                print("|cFF00FF00[ATA]|r " .. data.message)
+            else
+                print("|cFFFFFF00[ATA]|r No orphaned markers found nearby")
+            end
+        else
+            print("|cFFFF0000[ATA]|r Clear orphaned error: " .. (data.error or "Unknown error"))
+        end
+    end)
+end
+
+-- Function to update wander settings display
+local function UpdateWanderSettings(wanderRadius)
+    wanderCurrentValue:SetText(string.format("%.1f yards", wanderRadius or 0))
+    wanderEditBox:SetText(string.format("%.1f", wanderRadius or 5))
+end
+
+-- Function to show waypoint or wander content based on movement type
+local function UpdateMovementContent(movementType, wanderRadius, hasWaypointPath)
+    if movementType == 1 and not hasWaypointPath then
+        -- Random movement without waypoints - show wander settings
+        waypointListContainer:Hide()
+        waypointDivider:Hide()
+        waypointDetailPanel:Hide()
+        wanderSettingsContainer:Show()
+        UpdateWanderSettings(wanderRadius)
+        waypointButton:Disable()
+    else
+        -- Waypoint movement or has waypoint path - show waypoint list
+        wanderSettingsContainer:Hide()
+        waypointListContainer:Show()
+        waypointDivider:Show()
+        waypointDetailPanel:Show()
+        if hasWaypointPath then
+            waypointButton:Enable()
+        else
+            waypointButton:Disable()
+        end
+    end
+    
+    -- Reset button states when switching targets
+    spawnMarkerVisible = false
+    spawnMarkerBtn:SetText("Show Spawn Point")
+    wanderRadiusVisible = false
+    wanderRadiusBtn:SetText("Show Radius")
+    
+    -- Re-enable all buttons (in case they were disabled waiting for a response)
+    EnableWanderButtons()
+end
+
 -- Request waypoint details from server
 local function RequestWaypointDetails(pathId)
     if not AMS then return end
@@ -1331,6 +1707,14 @@ function npcPanel:Update(requestServerData, forceRefresh)
             else
                 waypointButton:Disable()
             end
+            
+            -- Update Waypoints tab to show either waypoint list or wander settings
+            if data and data.movement then
+                local movementType = data.movement.defaultType or 0
+                local wanderRadius = data.behavior and data.behavior.wanderRadius or 0
+                local hasWaypointPath = data.movement.waypointPath ~= nil
+                UpdateMovementContent(movementType, wanderRadius, hasWaypointPath)
+            end
         end, forceRefresh)  -- Pass forceRefresh to bypass cache
     end
     
@@ -1356,6 +1740,10 @@ end
 -- ============================================================================
 
 refreshButton:SetScript("OnClick", function()
+    -- Re-enable buttons in case they got stuck disabled from a failed request
+    pcall(function()
+        if EnableWanderButtons then EnableWanderButtons() end
+    end)
     npcPanel:Update(true, true)  -- Always force refresh from server, bypass cache
 end)
 

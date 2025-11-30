@@ -374,6 +374,314 @@ AMS.RegisterHandler("CLEAR_ALL_WAYPOINT_MARKERS", function(player, data)
     AMS.Send(player, "CLEAR_WAYPOINTS_RESPONSE", { success = true })
 end)
 
+-- ============================================================================
+-- Spawn Point Marker Operations
+-- ============================================================================
+
+--[[
+    SHOW_SPAWN_MARKER - Show a marker at the selected creature's spawn point
+    Request: { displayId = optional number }
+    Response: { success = bool, x, y, z, o }
+]]
+AMS.RegisterHandler("SHOW_SPAWN_MARKER", function(player, data)
+    print("[Admin Handlers] SHOW_SPAWN_MARKER request received")
+    
+    local creature = player:GetSelection()
+    if not creature then
+        AMS.Send(player, "SPAWN_MARKER_RESPONSE", { success = false, error = "No target selected" })
+        return
+    end
+    
+    creature = creature:ToCreature()
+    if not creature then
+        AMS.Send(player, "SPAWN_MARKER_RESPONSE", { success = false, error = "Target is not a creature" })
+        return
+    end
+    
+    -- Get home position for response
+    local x, y, z, o = creature:GetHomePosition()
+    
+    -- Show spawn marker (pass player for phase, optional displayId)
+    local displayId = data and data.displayId or nil
+    local success, marker = pcall(function() 
+        if displayId then
+            return creature:ShowSpawnPointMarker(player, displayId)
+        else
+            return creature:ShowSpawnPointMarker(player)
+        end
+    end)
+    
+    if success and marker then
+        print("[Admin Handlers] SHOW_SPAWN_MARKER: Marker created at " .. x .. ", " .. y .. ", " .. z)
+        AMS.Send(player, "SPAWN_MARKER_RESPONSE", { 
+            success = true, 
+            x = x, y = y, z = z, o = o,
+            message = "Spawn marker shown"
+        })
+    else
+        print("[Admin Handlers] SHOW_SPAWN_MARKER: Failed to create marker")
+        AMS.Send(player, "SPAWN_MARKER_RESPONSE", { 
+            success = false, 
+            error = "Failed to show marker (rebuild server required)"
+        })
+    end
+end)
+
+--[[
+    HIDE_SPAWN_MARKER - Hide the spawn point marker for the selected creature
+    Request: {}
+    Response: { success = bool }
+]]
+AMS.RegisterHandler("HIDE_SPAWN_MARKER", function(player, data)
+    print("[Admin Handlers] HIDE_SPAWN_MARKER request received")
+    
+    local creature = player:GetSelection()
+    if not creature then
+        AMS.Send(player, "SPAWN_MARKER_RESPONSE", { success = false, error = "No target selected" })
+        return
+    end
+    
+    creature = creature:ToCreature()
+    if not creature then
+        AMS.Send(player, "SPAWN_MARKER_RESPONSE", { success = false, error = "Target is not a creature" })
+        return
+    end
+    
+    local success = pcall(function() return creature:HideSpawnPointMarker() end)
+    
+    if success then
+        print("[Admin Handlers] HIDE_SPAWN_MARKER: Marker hidden")
+        AMS.Send(player, "SPAWN_MARKER_RESPONSE", { success = true, message = "Spawn marker hidden" })
+    else
+        print("[Admin Handlers] HIDE_SPAWN_MARKER: Failed to hide marker")
+        AMS.Send(player, "SPAWN_MARKER_RESPONSE", { success = false, error = "Failed to hide marker" })
+    end
+end)
+
+-- Local cache for wander radius markers (for same-session cleanup)
+-- Also stored in ElunaSharedData for visibility, but Lua object refs only work same-session
+local wanderRadiusMarkers = {}
+
+--[[
+    SHOW_WANDER_RADIUS - Show visual markers in a circle at the creature's wander radius
+    Request: { segments = optional number (default 12) }
+    Response: { success = bool, radius = number, x, y, z }
+]]
+AMS.RegisterHandler("SHOW_WANDER_RADIUS", function(player, data)
+    print("[Admin Handlers] SHOW_WANDER_RADIUS request received")
+    
+    local creature = player:GetSelection()
+    if not creature then
+        AMS.Send(player, "WANDER_RADIUS_RESPONSE", { success = false, error = "No target selected" })
+        return
+    end
+    
+    creature = creature:ToCreature()
+    if not creature then
+        AMS.Send(player, "WANDER_RADIUS_RESPONSE", { success = false, error = "Target is not a creature" })
+        return
+    end
+    
+    local spawnId = creature:GetDBTableGUIDLow()
+    local spawnIdStr = tostring(spawnId)  -- Convert to string for table key
+    local wanderRadius = creature:GetWanderRadius()
+    
+    if wanderRadius <= 0 then
+        AMS.Send(player, "WANDER_RADIUS_RESPONSE", { success = false, error = "Creature has no wander radius (0)" })
+        return
+    end
+    
+    -- Get spawn position
+    local homeX, homeY, homeZ, homeO = creature:GetHomePosition()
+    local markerKey = "wander_markers_" .. spawnIdStr
+    
+    -- Clear any existing markers for this creature (from local cache)
+    if wanderRadiusMarkers[spawnIdStr] then
+        for _, marker in ipairs(wanderRadiusMarkers[spawnIdStr]) do
+            if marker and marker:IsInWorld() then
+                marker:DespawnOrUnsummon()
+            end
+        end
+        wanderRadiusMarkers[spawnIdStr] = nil
+    end
+    ClearSharedData(markerKey)  -- Also clear shared data
+    
+    -- Number of markers around the circle (default 12 = every 30 degrees)
+    local segments = (data and data.segments) or 12
+    if segments < 4 then segments = 4 end
+    if segments > 36 then segments = 36 end
+    
+    local markers = {}
+    local markerGuids = {}
+    local angleStep = (2 * math.pi) / segments
+    
+    -- Spawn markers around the circle perimeter
+    for i = 0, segments - 1 do
+        local angle = i * angleStep
+        local markerX = homeX + wanderRadius * math.cos(angle)
+        local markerY = homeY + wanderRadius * math.sin(angle)
+        local markerZ = homeZ  -- Keep at spawn height
+        
+        -- Spawn a visual marker at this position
+        -- Using entry 1 (VISUAL_WAYPOINT) with a distinct display
+        local marker = creature:SpawnCreature(1, markerX, markerY, markerZ, 0, 8)  -- 8 = TEMPSUMMON_MANUAL_DESPAWN
+        if marker then
+            marker:SetDisplayId(31366)  -- Green circle like spawn marker
+            marker:SetScale(0.3)  -- Smaller for radius markers
+            table.insert(markers, marker)
+            table.insert(markerGuids, tostring(marker:GetGUIDLow()))
+        end
+    end
+    
+    -- Also spawn a marker at the center (spawn point)
+    local centerMarker = creature:SpawnCreature(1, homeX, homeY, homeZ, homeO, 8)
+    if centerMarker then
+        centerMarker:SetDisplayId(31366)  -- Green circle
+        centerMarker:SetScale(1.0)  -- Larger for center
+        table.insert(markers, centerMarker)
+        table.insert(markerGuids, tostring(centerMarker:GetGUIDLow()))
+    end
+    
+    -- Store in local cache for same-session cleanup (use string key)
+    wanderRadiusMarkers[spawnIdStr] = markers
+    
+    -- Also store GUIDs in shared data (for debugging/tracking)
+    SetSharedData(markerKey, Smallfolk.dumps(markerGuids))
+    
+    print("[Admin Handlers] SHOW_WANDER_RADIUS: Created " .. #markers .. " markers for radius " .. wanderRadius)
+    AMS.Send(player, "WANDER_RADIUS_RESPONSE", { 
+        success = true, 
+        radius = wanderRadius,
+        segments = segments,
+        markerCount = #markers,
+        x = homeX, y = homeY, z = homeZ,
+        message = "Wander radius shown (" .. wanderRadius .. " yards)"
+    })
+end)
+
+--[[
+    HIDE_WANDER_RADIUS - Hide the wander radius markers for the selected creature
+    Request: {}
+    Response: { success = bool }
+]]
+AMS.RegisterHandler("HIDE_WANDER_RADIUS", function(player, data)
+    print("[Admin Handlers] HIDE_WANDER_RADIUS request received")
+    
+    local creature = player:GetSelection()
+    if not creature then
+        AMS.Send(player, "WANDER_RADIUS_RESPONSE", { success = false, error = "No target selected" })
+        return
+    end
+    
+    creature = creature:ToCreature()
+    if not creature then
+        AMS.Send(player, "WANDER_RADIUS_RESPONSE", { success = false, error = "Target is not a creature" })
+        return
+    end
+    
+    local spawnId = creature:GetDBTableGUIDLow()
+    local spawnIdStr = tostring(spawnId)
+    local markerKey = "wander_markers_" .. spawnIdStr
+    
+    if wanderRadiusMarkers[spawnIdStr] then
+        local count = #wanderRadiusMarkers[spawnIdStr]
+        for _, marker in ipairs(wanderRadiusMarkers[spawnIdStr]) do
+            if marker and marker:IsInWorld() then
+                marker:DespawnOrUnsummon()
+            end
+        end
+        wanderRadiusMarkers[spawnIdStr] = nil
+        ClearSharedData(markerKey)
+        print("[Admin Handlers] HIDE_WANDER_RADIUS: Removed " .. count .. " markers")
+        AMS.Send(player, "WANDER_RADIUS_RESPONSE", { success = true, message = "Wander radius hidden" })
+    else
+        -- No local cache - markers may have been lost on reload
+        -- They'll despawn naturally, just clear any tracking data
+        ClearSharedData(markerKey)
+        AMS.Send(player, "WANDER_RADIUS_RESPONSE", { success = true, message = "Wander radius markers cleared (may already be despawned)" })
+    end
+end)
+
+--[[
+    CLEAR_WANDER_MARKERS - Clear both spawn marker and wander radius markers
+    Request: {}
+    Response: { success = bool }
+]]
+AMS.RegisterHandler("CLEAR_WANDER_MARKERS", function(player, data)
+    print("[Admin Handlers] CLEAR_WANDER_MARKERS request received")
+    
+    local creature = player:GetSelection()
+    if not creature then
+        AMS.Send(player, "CLEAR_WANDER_MARKERS_RESPONSE", { success = false, error = "No target selected" })
+        return
+    end
+    
+    creature = creature:ToCreature()
+    if not creature then
+        AMS.Send(player, "CLEAR_WANDER_MARKERS_RESPONSE", { success = false, error = "Target is not a creature" })
+        return
+    end
+    
+    local spawnId = creature:GetDBTableGUIDLow()
+    local spawnIdStr = tostring(spawnId)
+    local cleared = 0
+    local messages = {}
+    
+    -- Clear spawn marker (via C++ method if available)
+    local spawnSuccess, spawnResult = pcall(function() return creature:HideSpawnPointMarker() end)
+    if spawnSuccess and spawnResult then 
+        cleared = cleared + 1 
+        table.insert(messages, "spawn marker")
+    end
+    
+    -- Clear wander radius markers (from local cache, use string key)
+    if wanderRadiusMarkers[spawnIdStr] then
+        local count = #wanderRadiusMarkers[spawnIdStr]
+        for _, marker in ipairs(wanderRadiusMarkers[spawnIdStr]) do
+            if marker and marker:IsInWorld() then
+                marker:DespawnOrUnsummon()
+                cleared = cleared + 1
+            end
+        end
+        wanderRadiusMarkers[spawnIdStr] = nil
+        table.insert(messages, count .. " radius markers")
+    end
+    
+    -- Clear shared data
+    ClearSharedData("wander_markers_" .. spawnIdStr)
+    
+    local msg = cleared > 0 and ("Cleared: " .. table.concat(messages, ", ")) or "No active markers in cache (may have been lost on reload)"
+    print("[Admin Handlers] CLEAR_WANDER_MARKERS: " .. msg .. " for creature " .. tostring(spawnId))
+    AMS.Send(player, "CLEAR_WANDER_MARKERS_RESPONSE", { success = true, cleared = cleared, message = msg })
+end)
+
+--[[
+    CLEAR_NEARBY_MARKERS - Emergency clear of all VISUAL_WAYPOINT creatures near player
+    This clears orphaned markers from before tracking was implemented
+    Request: { range = optional number (default 100) }
+    Response: { success = bool, cleared = number }
+]]
+AMS.RegisterHandler("CLEAR_NEARBY_MARKERS", function(player, data)
+    print("[Admin Handlers] CLEAR_NEARBY_MARKERS request received")
+    
+    local range = (data and data.range) or 100
+    local cleared = 0
+    
+    -- Get all creatures near player with entry 1 (VISUAL_WAYPOINT)
+    local creatures = player:GetCreaturesInRange(range, 1)  -- entry 1 = VISUAL_WAYPOINT
+    if creatures then
+        for _, creature in ipairs(creatures) do
+            if creature and creature:IsInWorld() then
+                creature:DespawnOrUnsummon()
+                cleared = cleared + 1
+            end
+        end
+    end
+    
+    print("[Admin Handlers] CLEAR_NEARBY_MARKERS: Cleared " .. cleared .. " markers within " .. range .. " yards")
+    AMS.Send(player, "CLEAR_NEARBY_MARKERS_RESPONSE", { success = true, cleared = cleared, message = "Cleared " .. cleared .. " orphaned markers" })
+end)
+
 -- Get detailed waypoint data for a path
 AMS.RegisterHandler("GET_WAYPOINT_DETAILS", function(player, data)
     if not data or not data.pathId then
@@ -528,6 +836,151 @@ AMS.RegisterHandler("TELEPORT_TO_WAYPOINT", function(player, data)
 end)
 
 -- ============================================================================
+-- Creature Edit Operations (Araxia Write Operations)
+-- ============================================================================
+
+--[[
+    SET_WANDER_DISTANCE - Set the wander distance for the selected creature
+    Request: { distance = 10.0 }
+    Response: { success = bool, message = string, newDistance = number }
+    Note: Creature must be selected (same as GET_NPC_DATA)
+]]
+AMS.RegisterHandler("SET_WANDER_DISTANCE", function(player, data)
+    if not data or data.distance == nil then
+        print("[Admin Handlers] SET_WANDER_DISTANCE: Missing distance")
+        AMS.Send(player, "SET_WANDER_DISTANCE_RESPONSE", {
+            success = false,
+            message = "Missing distance parameter"
+        })
+        return
+    end
+    
+    print("[Admin Handlers] SET_WANDER_DISTANCE: Setting distance to " .. data.distance)
+    
+    -- Use player's selection (same pattern as GET_NPC_DATA)
+    local creature = player:GetSelection()
+    if not creature then
+        AMS.Send(player, "SET_WANDER_DISTANCE_RESPONSE", {
+            success = false,
+            message = "No creature selected"
+        })
+        return
+    end
+    
+    creature = creature:ToCreature()
+    if not creature then
+        AMS.Send(player, "SET_WANDER_DISTANCE_RESPONSE", {
+            success = false,
+            message = "Selected object is not a creature"
+        })
+        return
+    end
+    
+    local spawnId = creature:GetDBTableGUIDLow()
+    local spawnIdStr = tostring(spawnId)  -- Convert to string for table key
+    local homeX, homeY, homeZ, homeO = creature:GetHomePosition()
+    
+    -- Check if markers were visible and hide them
+    local hadSpawnMarker = false
+    local hadRadiusMarkers = false
+    
+    -- Try to hide spawn marker (via C++) - check if it returns true
+    local spawnHideSuccess, spawnHideResult = pcall(function() return creature:HideSpawnPointMarker() end)
+    if spawnHideSuccess and spawnHideResult then
+        hadSpawnMarker = true
+        print("[Admin Handlers] SET_WANDER_DISTANCE: Hid spawn marker")
+    end
+    
+    -- Hide wander radius markers if they exist (use string key)
+    if wanderRadiusMarkers[spawnIdStr] then
+        hadRadiusMarkers = true
+        for _, marker in ipairs(wanderRadiusMarkers[spawnIdStr]) do
+            if marker and marker:IsInWorld() then
+                marker:DespawnOrUnsummon()
+            end
+        end
+        wanderRadiusMarkers[spawnIdStr] = nil
+        ClearSharedData("wander_markers_" .. spawnIdStr)
+        print("[Admin Handlers] SET_WANDER_DISTANCE: Hid radius markers")
+    end
+    
+    -- Use the Araxia writer method to save to database
+    local success, message = creature:SaveWanderDistance(data.distance, player)
+    
+    print("[Admin Handlers] SET_WANDER_DISTANCE: Result - " .. tostring(success) .. ", " .. message)
+    
+    -- Despawn and respawn the creature so the new settings take effect immediately
+    if success then
+        -- Set a very short respawn delay (1 second), then despawn
+        creature:SetRespawnDelay(1)
+        creature:Respawn()  -- Mark for respawn
+        creature:DespawnOrUnsummon(0)  -- Remove from world
+        print("[Admin Handlers] SET_WANDER_DISTANCE: Creature despawned, respawning in 1 second")
+        
+        -- Tell client markers need to be re-shown (client will handle the delay)
+        if hadSpawnMarker or hadRadiusMarkers then
+            print("[Admin Handlers] SET_WANDER_DISTANCE: Markers will need to be re-shown after respawn")
+        end
+    end
+    
+    AMS.Send(player, "SET_WANDER_DISTANCE_RESPONSE", {
+        success = success,
+        message = message,
+        newDistance = data.distance,
+        markersCleared = hadSpawnMarker or hadRadiusMarkers,
+        hadSpawnMarker = hadSpawnMarker,
+        hadRadiusMarkers = hadRadiusMarkers
+    })
+end)
+
+--[[
+    SET_MOVEMENT_TYPE - Set the movement type for the selected creature
+    Request: { movementType = 0|1|2 }
+    Response: { success = bool, message = string, newMovementType = number }
+    Note: Creature must be selected
+]]
+AMS.RegisterHandler("SET_MOVEMENT_TYPE", function(player, data)
+    if not data or data.movementType == nil then
+        print("[Admin Handlers] SET_MOVEMENT_TYPE: Missing movementType")
+        AMS.Send(player, "SET_MOVEMENT_TYPE_RESPONSE", {
+            success = false,
+            message = "Missing movementType parameter"
+        })
+        return
+    end
+    
+    print("[Admin Handlers] SET_MOVEMENT_TYPE: Setting type to " .. data.movementType)
+    
+    local creature = player:GetSelection()
+    if not creature then
+        AMS.Send(player, "SET_MOVEMENT_TYPE_RESPONSE", {
+            success = false,
+            message = "No creature selected"
+        })
+        return
+    end
+    
+    creature = creature:ToCreature()
+    if not creature then
+        AMS.Send(player, "SET_MOVEMENT_TYPE_RESPONSE", {
+            success = false,
+            message = "Selected object is not a creature"
+        })
+        return
+    end
+    
+    local success, message = creature:SaveMovementType(data.movementType, player)
+    
+    print("[Admin Handlers] SET_MOVEMENT_TYPE: Result - " .. tostring(success) .. ", " .. message)
+    
+    AMS.Send(player, "SET_MOVEMENT_TYPE_RESPONSE", {
+        success = success,
+        message = message,
+        newMovementType = data.movementType
+    })
+end)
+
+-- ============================================================================
 -- Initialization
 -- ============================================================================
 
@@ -538,8 +991,16 @@ print("  - SHOW_WAYPOINTS")
 print("  - HIDE_WAYPOINTS")
 print("  - HIDE_WAYPOINTS_BY_GUID")
 print("  - CLEAR_ALL_WAYPOINT_MARKERS")
+print("  - SHOW_SPAWN_MARKER")
+print("  - HIDE_SPAWN_MARKER")
+print("  - SHOW_WANDER_RADIUS")
+print("  - HIDE_WANDER_RADIUS")
+print("  - CLEAR_WANDER_MARKERS")
+print("  - CLEAR_NEARBY_MARKERS")
 print("  - GET_WAYPOINT_DETAILS")
 print("  - SELECT_WAYPOINT")
 print("  - GET_WAYPOINT_FOR_GUID")
 print("  - GET_PLAYER_DATA")
 print("  - TELEPORT_TO_WAYPOINT")
+print("  - SET_WANDER_DISTANCE")
+print("  - SET_MOVEMENT_TYPE")
