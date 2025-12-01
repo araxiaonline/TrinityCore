@@ -217,19 +217,21 @@ void MCPServer::HandleMCPRequest(const std::string& body, std::string& response)
 
 json MCPServer::ProcessJsonRpc(const json& request)
 {
+    // Extract ID first (can be number, string, or null)
+    json id = request.contains("id") ? request["id"] : json(nullptr);
+    
     // Validate JSON-RPC structure
     if (!request.contains("jsonrpc") || request["jsonrpc"] != "2.0")
     {
         return {
             {"jsonrpc", "2.0"},
             {"error", {{"code", -32600}, {"message", "Invalid Request"}}},
-            {"id", request.value("id", nullptr)}
+            {"id", id}
         };
     }
     
     std::string method = request.value("method", "");
-    json params = request.value("params", json::object());
-    auto id = request.value("id", nullptr);
+    json params = request.contains("params") ? request["params"] : json::object();
     
     json result;
     

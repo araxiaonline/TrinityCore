@@ -2,15 +2,17 @@
 
 ## Overview
 
-The Araxia MCP Server embeds a Model Context Protocol server directly into the worldserver, enabling AI assistants (like Claude) to interact with the game server in real-time.
+The Araxia MCP Server embeds a Model Context Protocol server directly into the worldserver, enabling AI assistants (like Claude/Cascade) to interact with the game server in real-time.
+
+**Status:** ✅ Phase 1 Complete (Nov 30, 2025)
 
 ## Features
 
-- **Database Access**: Direct SQL queries to world, characters, and auth databases
-- **Server Status**: Real-time server info, player lists, uptime
-- **GM Commands**: Execute GM commands programmatically
-- **Eluna Integration**: (Coming) Execute Lua, inspect state, hot-reload
-- **AMS Bridge**: (Coming) Communicate with client addons
+- **Database Access**: ✅ Direct SQL queries to world, characters, and auth databases
+- **Server Status**: ✅ Real-time server info, player lists, uptime
+- **GM Commands**: ✅ Stub (needs ChatHandler integration)
+- **Eluna Integration**: ⏳ (Phase 2) Execute Lua, inspect state, hot-reload
+- **AMS Bridge**: ⏳ (Phase 4) Communicate with client addons
 
 ## Configuration
 
@@ -136,3 +138,41 @@ curl -X POST http://localhost:8765/mcp \
 ### Can't connect remotely
 - Set `Araxia.MCP.AllowRemote = 1`
 - Ensure firewall allows port 8765
+
+## Implementation Notes
+
+### Dependencies (Header-Only)
+- **cpp-httplib** (`httplib.h`) - Embedded HTTP server
+- **nlohmann/json** (`json.hpp`) - JSON parsing and serialization
+
+### TrinityCore API Learnings
+- Use `sConfigMgr->GetBoolDefault()`, `GetIntDefault()`, `GetStringDefault()` (not `GetOption<T>`)
+- `Field::GetString()` works for all field types (no `GetType()` method)
+- `QueryResultFieldMetadata` has `Alias` and `Name` (may be null)
+- JSON-RPC `id` field: use `request.contains("id") ? request["id"] : json(nullptr)`
+
+### Files Created
+```
+src/araxiaonline/mcp/
+├── AraxiaMCPServer.cpp   # Core server, JSON-RPC handling
+├── AraxiaMCPServer.h     # Public interface, tool registration
+├── DatabaseTools.cpp     # db_query, db_execute, db_tables, db_describe
+├── ServerTools.cpp       # server_info, player_list, gm_command
+├── httplib.h             # cpp-httplib (external)
+└── json.hpp              # nlohmann/json (external)
+```
+
+### Integration Points
+- `World.cpp` - `sMCPServer->Initialize()` in `SetInitialWorldSettings()`
+- `World.cpp` - `sMCPServer->Shutdown()` in destructor
+- `CMakeLists.txt` - Auto-collected via `CollectSourceFiles`
+
+## Roadmap
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 1 | Database tools, server info | ✅ Complete |
+| 2 | Eluna integration (lua_eval, shared_data) | ⏳ Planned |
+| 3 | World object tools (creatures, GOs) | ⏳ Planned |
+| 4 | AMS bridge (client addon communication) | ⏳ Planned |
+| 5 | Event streaming (logs, world events) | ⏳ Planned |
