@@ -4,15 +4,25 @@
 
 The Araxia MCP Server embeds a Model Context Protocol server directly into the worldserver, enabling AI assistants (like Claude/Cascade) to interact with the game server in real-time.
 
-**Status:** ✅ Phase 1 Complete (Nov 30, 2025)
+**Status:** ✅ Phase 1 & 2 Complete (Nov 30, 2025)
+
+## 🎉 What This Enables
+
+With this integration, the AI assistant can:
+- **Query databases directly** - No more asking you to run SQL commands
+- **See online players** - Know who's logged in and where they are
+- **Read client messages** - Receive data from the WoW client via AMS bridge
+- **Write to client** - Send messages that display in the WoW client
+- **Debug in real-time** - Direct access to server state while you're playing
 
 ## Features
 
 - **Database Access**: ✅ Direct SQL queries to world, characters, and auth databases
 - **Server Status**: ✅ Real-time server info, player lists, uptime
+- **Shared Data Bridge**: ✅ Read/write ElunaSharedData (client ↔ MCP communication)
 - **GM Commands**: ✅ Stub (needs ChatHandler integration)
-- **Eluna Integration**: ⏳ (Phase 2) Execute Lua, inspect state, hot-reload
-- **AMS Bridge**: ⏳ (Phase 4) Communicate with client addons
+- **Eluna Integration**: ⏳ (Phase 3) Execute Lua, inspect state, hot-reload
+- **World Object Tools**: ⏳ (Phase 4) Creature/GO manipulation
 
 ## Configuration
 
@@ -167,12 +177,83 @@ src/araxiaonline/mcp/
 - `World.cpp` - `sMCPServer->Shutdown()` in destructor
 - `CMakeLists.txt` - Auto-collected via `CollectSourceFiles`
 
+## Windsurf MCP Configuration
+
+To connect Cascade/Claude directly to the worldserver, add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "araxia-worldserver": {
+      "url": "http://localhost:8765/mcp",
+      "transport": "http"
+    }
+  }
+}
+```
+
+After adding, restart Windsurf. The AI will have direct access to all MCP tools.
+
+## AMS Bridge (Client ↔ MCP)
+
+The AMS bridge enables bidirectional communication between the WoW client and the MCP server.
+
+### Data Flow
+```
+Client Addon → AMS.Send() → Server Lua → ElunaSharedData → MCP Tool
+MCP Tool → ElunaSharedData → Server Lua → AMS.Send() → Client Addon
+```
+
+### Client Side (`AraxiaTrinityAdmin/MCPBridge.lua`)
+- Captures chat messages and sends to server
+- Provides `/mcpbridge` commands for control
+- Polls for messages from MCP (disabled by default)
+
+### Server Side (`lua_scripts/mcp_bridge.lua`)
+- Receives client messages via AMS handlers
+- Stores in ElunaSharedData for MCP to read
+- Reads MCP messages and sends to client
+
+### Shared Data Keys
+| Key | Purpose |
+|-----|---------|
+| `mcp_client_chat` | Chat messages from client |
+| `mcp_client_logs` | Log/error messages from client |
+| `mcp_to_client` | Messages from MCP to display on client |
+
+### Client Commands
+```
+/mcpbridge status   - Show bridge status
+/mcpbridge test     - Send test message to MCP
+/mcpbridge on/off   - Enable/disable bridge
+/mcpbridge poll     - Start polling for MCP messages
+```
+
 ## Roadmap
 
 | Phase | Feature | Status |
 |-------|---------|--------|
 | 1 | Database tools, server info | ✅ Complete |
-| 2 | Eluna integration (lua_eval, shared_data) | ⏳ Planned |
-| 3 | World object tools (creatures, GOs) | ⏳ Planned |
-| 4 | AMS bridge (client addon communication) | ⏳ Planned |
+| 2 | Shared data bridge (ElunaSharedData) | ✅ Complete |
+| 3 | Eluna integration (lua_eval, hot-reload) | ⏳ Planned |
+| 4 | World object tools (creatures, GOs) | ⏳ Planned |
 | 5 | Event streaming (logs, world events) | ⏳ Planned |
+
+## Key Learnings
+
+### nlohmann/json Gotchas
+- **Never use `request.value("id", nullptr)`** - causes type errors
+- Use `request.contains("id") ? request["id"] : json(nullptr)` instead
+
+### TrinityCore ConfigMgr API
+- Use `sConfigMgr->GetBoolDefault()`, `GetIntDefault()`, `GetStringDefault()`
+- NOT `GetOption<T>()` which doesn't exist
+
+### ElunaSharedData API
+- Singleton pattern: `sElunaSharedData->Get()`, `Set()`, `GetKeys()`
+- Lua API: `SetSharedData()`, `GetSharedData()`, `HasSharedData()`
+
+### AMS Client/Server Pattern
+- Client: `AMS.Send("HANDLER_NAME", data)` (dot notation, NOT colon!)
+- Server: `AMS.Send(player, "HANDLER_NAME", data)`
+- Never serialize functions - Smallfolk will error

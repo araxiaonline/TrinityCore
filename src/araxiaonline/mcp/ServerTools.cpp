@@ -13,6 +13,7 @@
 #include "Log.h"
 #include "GitRevision.h"
 #include "GameTime.h"
+#include "LuaEngine/ElunaSharedData.h"
 
 namespace Araxia
 {
@@ -209,27 +210,108 @@ void RegisterServerTools()
         },
         [](const json& params) -> json {
             std::string pattern = params.value("pattern", "");
-            int maxLines = params.value("lines", 50);
-            std::string logType = params.value("logType", "server");
             
-            // For now, return info about where logs are
+            // This is a placeholder - actual log search would read ElunaSharedData
+            // where the client/server Lua code writes log messages
             return {
                 {"success", true},
-                {"message", "Log search requires file access. Logs are typically in /opt/trinitycore/logs/"},
-                {"logFiles", {
-                    {"server", "Server.log"},
-                    {"eluna", "Eluna.log"},
-                    {"dberrors", "DBErrors.log"},
-                    {"gm", "GM.log"}
-                }},
-                {"pattern", pattern},
-                {"maxLines", maxLines},
-                {"note", "Use db_query on characters.gm_command_log for GM command history"}
+                {"message", "Use shared_data tool with key 'mcp_logs' to read logs pushed by client/server"},
+                {"pattern", pattern}
             };
         }
     );
     
-    TC_LOG_INFO("araxia.mcp", "[MCP] Server tools registered (server_info, player_list, gm_command, reload_scripts, log_search)");
+    // shared_data_read - Read from ElunaSharedData (AMS bridge)
+    sMCPServer->RegisterTool(
+        "shared_data_read",
+        "Read data from ElunaSharedData. This is the bridge for client/server Lua communication.",
+        {
+            {"type", "object"},
+            {"properties", {
+                {"key", {
+                    {"type", "string"},
+                    {"description", "The shared data key to read (e.g., 'mcp_logs', 'mcp_client_chat')"}
+                }}
+            }},
+            {"required", {"key"}}
+        },
+        [](const json& params) -> json {
+            std::string key = params.value("key", "");
+            
+            if (key.empty())
+                return {{"success", false}, {"error", "Key is required"}};
+            
+            std::string value;
+            bool exists = sElunaSharedData->Get(key, value);
+            
+            return {
+                {"success", true},
+                {"key", key},
+                {"exists", exists},
+                {"value", exists ? value : ""}
+            };
+        }
+    );
+    
+    // shared_data_write - Write to ElunaSharedData
+    sMCPServer->RegisterTool(
+        "shared_data_write",
+        "Write data to ElunaSharedData. Lua scripts can read this.",
+        {
+            {"type", "object"},
+            {"properties", {
+                {"key", {
+                    {"type", "string"},
+                    {"description", "The shared data key to write"}
+                }},
+                {"value", {
+                    {"type", "string"},
+                    {"description", "The value to store (use JSON string for complex data)"}
+                }}
+            }},
+            {"required", {"key", "value"}}
+        },
+        [](const json& params) -> json {
+            std::string key = params.value("key", "");
+            std::string value = params.value("value", "");
+            
+            if (key.empty())
+                return {{"success", false}, {"error", "Key is required"}};
+            
+            sElunaSharedData->Set(key, value);
+            
+            return {
+                {"success", true},
+                {"key", key},
+                {"message", "Data written successfully"}
+            };
+        }
+    );
+    
+    // shared_data_keys - List all shared data keys
+    sMCPServer->RegisterTool(
+        "shared_data_keys",
+        "List all keys in ElunaSharedData.",
+        {
+            {"type", "object"},
+            {"properties", json::object()}
+        },
+        [](const json& /*params*/) -> json {
+            std::vector<std::string> keys = sElunaSharedData->GetKeys();
+            
+            json keysJson = json::array();
+            for (const auto& k : keys)
+                keysJson.push_back(k);
+            
+            return {
+                {"success", true},
+                {"keys", keysJson},
+                {"count", keys.size()}
+            };
+        }
+    );
+    
+    TC_LOG_INFO("araxia.mcp", "[MCP] Server tools registered (server_info, player_list, gm_command, reload_scripts, log_search, shared_data_*)");
 }
 
 } // namespace Araxia
