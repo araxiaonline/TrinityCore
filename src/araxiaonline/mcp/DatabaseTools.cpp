@@ -112,22 +112,45 @@ void RegisterDatabaseTools()
             
             TC_LOG_DEBUG("araxia.mcp", "[MCP] db_query on %s: %s", database.c_str(), query.c_str());
             
-            QueryResult result;
-            if (database == "world")
-                result = WorldDatabase.Query(query.c_str());
-            else if (database == "characters")
-                result = CharacterDatabase.Query(query.c_str());
-            else if (database == "auth")
-                result = LoginDatabase.Query(query.c_str());
-            else
-                return {{"success", false}, {"error", "Unknown database: " + database}};
-            
-            json data = QueryResultToJson(result);
-            data["success"] = true;
-            data["database"] = database;
-            data["query"] = query;
-            
-            return data;
+            try
+            {
+                QueryResult result;
+                if (database == "world")
+                    result = WorldDatabase.Query(query.c_str());
+                else if (database == "characters")
+                    result = CharacterDatabase.Query(query.c_str());
+                else if (database == "auth")
+                    result = LoginDatabase.Query(query.c_str());
+                else
+                    return {{"success", false}, {"error", "Unknown database: " + database}};
+                
+                json data = QueryResultToJson(result);
+                data["success"] = true;
+                data["database"] = database;
+                data["query"] = query;
+                
+                return data;
+            }
+            catch (const std::exception& e)
+            {
+                TC_LOG_ERROR("araxia.mcp", "[MCP] db_query EXCEPTION: %s", e.what());
+                return {
+                    {"success", false},
+                    {"error", std::string("Query exception: ") + e.what()},
+                    {"database", database},
+                    {"query", query}
+                };
+            }
+            catch (...)
+            {
+                TC_LOG_ERROR("araxia.mcp", "[MCP] db_query UNKNOWN EXCEPTION");
+                return {
+                    {"success", false},
+                    {"error", "Unknown query exception - check server logs"},
+                    {"database", database},
+                    {"query", query}
+                };
+            }
         }
     );
     
@@ -226,33 +249,44 @@ void RegisterDatabaseTools()
         [](const json& params) -> json {
             std::string database = params.value("database", "world");
             
-            QueryResult result;
-            if (database == "world")
-                result = WorldDatabase.Query("SHOW TABLES");
-            else if (database == "characters")
-                result = CharacterDatabase.Query("SHOW TABLES");
-            else if (database == "auth")
-                result = LoginDatabase.Query("SHOW TABLES");
-            else
-                return {{"success", false}, {"error", "Unknown database: " + database}};
-            
-            json tables = json::array();
-            if (result)
+            try
             {
-                do
+                QueryResult result;
+                if (database == "world")
+                    result = WorldDatabase.Query("SHOW TABLES");
+                else if (database == "characters")
+                    result = CharacterDatabase.Query("SHOW TABLES");
+                else if (database == "auth")
+                    result = LoginDatabase.Query("SHOW TABLES");
+                else
+                    return {{"success", false}, {"error", "Unknown database: " + database}};
+                
+                json tables = json::array();
+                if (result)
                 {
-                    Field* fields = result->Fetch();
-                    tables.push_back(fields[0].GetString());
+                    do
+                    {
+                        Field* fields = result->Fetch();
+                        tables.push_back(fields[0].GetString());
+                    }
+                    while (result->NextRow());
                 }
-                while (result->NextRow());
+                
+                return {
+                    {"success", true},
+                    {"database", database},
+                    {"tables", tables},
+                    {"count", tables.size()}
+                };
             }
-            
-            return {
-                {"success", true},
-                {"database", database},
-                {"tables", tables},
-                {"count", tables.size()}
-            };
+            catch (const std::exception& e)
+            {
+                return {{"success", false}, {"error", std::string("Exception: ") + e.what()}};
+            }
+            catch (...)
+            {
+                return {{"success", false}, {"error", "Unknown exception in db_tables"}};
+            }
         }
     );
     
@@ -288,22 +322,33 @@ void RegisterDatabaseTools()
             
             std::string query = "DESCRIBE " + table;
             
-            QueryResult result;
-            if (database == "world")
-                result = WorldDatabase.Query(query.c_str());
-            else if (database == "characters")
-                result = CharacterDatabase.Query(query.c_str());
-            else if (database == "auth")
-                result = LoginDatabase.Query(query.c_str());
-            else
-                return {{"success", false}, {"error", "Unknown database: " + database}};
-            
-            json data = QueryResultToJson(result);
-            data["success"] = true;
-            data["database"] = database;
-            data["table"] = table;
-            
-            return data;
+            try
+            {
+                QueryResult result;
+                if (database == "world")
+                    result = WorldDatabase.Query(query.c_str());
+                else if (database == "characters")
+                    result = CharacterDatabase.Query(query.c_str());
+                else if (database == "auth")
+                    result = LoginDatabase.Query(query.c_str());
+                else
+                    return {{"success", false}, {"error", "Unknown database: " + database}};
+                
+                json data = QueryResultToJson(result);
+                data["success"] = true;
+                data["database"] = database;
+                data["table"] = table;
+                
+                return data;
+            }
+            catch (const std::exception& e)
+            {
+                return {{"success", false}, {"error", std::string("Exception: ") + e.what()}, {"table", table}};
+            }
+            catch (...)
+            {
+                return {{"success", false}, {"error", "Unknown exception in db_describe"}, {"table", table}};
+            }
         }
     );
     

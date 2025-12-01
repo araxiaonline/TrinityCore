@@ -87,7 +87,7 @@ local function RegisterAMSHandler()
         return
     end
     
-    AMS:RegisterHandler("MCP_MESSAGES_RESPONSE", function(data)
+    AMS.RegisterHandler("MCP_MESSAGES_RESPONSE", function(data)
         MCPBridge:OnMCPMessagesReceived(data)
     end)
     

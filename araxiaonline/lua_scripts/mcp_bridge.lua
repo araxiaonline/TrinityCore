@@ -76,14 +76,28 @@ end
 -- AMS Handler: Client requests any pending MCP messages
 local function HandleMCPGetMessages(player, data)
     local messagesData = GetSharedData("mcp_to_client")
-    local messages = messagesData and Smallfolk.loads(messagesData) or {}
+    
+    -- MCP writes plain JSON, not Smallfolk format
+    -- Just send the raw string - client can parse or display it
+    local messages = {}
+    
+    if messagesData and messagesData ~= "" and messagesData ~= "{}" and messagesData ~= "[]" then
+        -- Try to extract simple messages from JSON-like format
+        -- Format: [{"message":"text"},{"message":"text2"}]
+        for msg in messagesData:gmatch('"message":"([^"]*)"') do
+            table.insert(messages, {message = msg})
+        end
+    end
     
     -- Clear after reading
-    SetSharedData("mcp_to_client", Smallfolk.dumps({}))
+    SetSharedData("mcp_to_client", "")
     
-    AMS.Send(player, "MCP_MESSAGES_RESPONSE", {
-        messages = messages
-    })
+    if #messages > 0 then
+        AMS.Send(player, "MCP_MESSAGES_RESPONSE", {
+            messages = messages
+        })
+        print("[MCP Bridge] Sent " .. #messages .. " messages to client")
+    end
 end
 
 -- AMS Handler: Client sends DB query result or other structured data

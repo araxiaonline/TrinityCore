@@ -235,9 +235,41 @@ MCP Tool → ElunaSharedData → Server Lua → AMS.Send() → Client Addon
 |-------|---------|--------|
 | 1 | Database tools, server info | ✅ Complete |
 | 2 | Shared data bridge (ElunaSharedData) | ✅ Complete |
-| 3 | Eluna integration (lua_eval, hot-reload) | ⏳ Planned |
+| 3 | Content Creator Commands (via AMS, not GM-only) | ⏳ Next |
 | 4 | World object tools (creatures, GOs) | ⏳ Planned |
-| 5 | Event streaming (logs, world events) | ⏳ Planned |
+| 5 | Eluna integration (lua_eval, hot-reload) | ⏳ Planned |
+| 6 | **Event Bus** (unified pub/sub for all systems) | ⏳ Planned |
+
+### Event Bus (See EVENT_BUS_DESIGN.md)
+
+Unified internal event system connecting C++ Core, Eluna, MCP, and AMS:
+- Any component can publish/subscribe to events
+- Real-time event streaming (no polling)
+- Full event history for debugging
+- Enables MCP to see player target changes, spawns, errors, etc.
+
+### Phase 3: Content Creator Commands
+
+**Goal:** Allow any player with AraxiaTrinityAdmin addon to execute server commands without GM status.
+
+**Architecture:**
+```
+Client Addon → AMS → Server Lua → Eluna API (bypasses GM check)
+```
+
+**Planned Commands:**
+- `target <name>` - Target creature by name/entry
+- `teleport <x,y,z>` - Teleport player
+- `spawn <entry>` - Spawn creature/GO
+- `modify <property>` - Modify targeted creature
+- `waypoint` - Waypoint management
+- `respawn` - Force respawn targeted creature
+
+**Security:**
+- Server-side validation of addon presence
+- Configurable permission system (whitelist accounts/players)
+- All actions logged for audit
+- No access to actual GM commands (ban, kick, etc.)
 
 ## Key Learnings
 
