@@ -20,9 +20,35 @@ With this integration, the AI assistant can:
 - **Database Access**: ✅ Direct SQL queries to world, characters, and auth databases
 - **Server Status**: ✅ Real-time server info, player lists, uptime
 - **Shared Data Bridge**: ✅ Read/write ElunaSharedData (client ↔ MCP communication)
+- **World Scan (LIDAR)**: ✅ Spatial awareness - see walls, creatures, room layout!
 - **GM Commands**: ✅ Stub (needs ChatHandler integration)
 - **Eluna Integration**: ⏳ (Phase 3) Execute Lua, inspect state, hot-reload
 - **World Object Tools**: ⏳ (Phase 4) Creature/GO manipulation
+
+## World Scan (LIDAR Vision)
+
+The `world_scan` tool gives the AI spatial awareness by casting rays using vmaps:
+
+```
++---------------------+
+|   #######           |
+|   #     ###         |
+|   # S       #       |
+|   #    @>   #       |  ← You facing East
+|   #         #       |
+|   #  D      #       |
+|   ###########       |
++---------------------+
+@ = You, # = Wall, S = Sentry, D = Disciple
+```
+
+**How it works:**
+1. Casts 72 rays (every 5°) from player position
+2. Uses VMAP data to detect walls/obstacles
+3. Detects all creatures in range
+4. Generates ASCII art visualization
+
+**Usage:** AI calls `world_scan` tool directly - no player action needed!
 
 ## Configuration
 

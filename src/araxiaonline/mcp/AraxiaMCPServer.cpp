@@ -60,8 +60,9 @@ bool MCPServer::Initialize()
     // Register built-in tools
     RegisterServerTools();
     RegisterDatabaseTools();
-    // RegisterElunaTools();  // Phase 2
-    // RegisterWorldTools();  // Phase 3
+    RegisterWorldScanTools();  // LIDAR-style spatial awareness
+    // RegisterElunaTools();  // Phase 3
+    // RegisterWorldTools();  // Phase 4
     
     // Setup HTTP routes
     auto& svr = _impl->server;

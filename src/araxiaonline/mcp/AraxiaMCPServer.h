@@ -105,6 +105,7 @@ void RegisterDatabaseTools();
 void RegisterServerTools();
 void RegisterElunaTools();
 void RegisterWorldTools();
+void RegisterWorldScanTools();  // LIDAR-style spatial awareness
 
 } // namespace Araxia
 
