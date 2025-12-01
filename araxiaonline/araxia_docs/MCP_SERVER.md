@@ -4,7 +4,9 @@
 
 The Araxia MCP Server embeds a Model Context Protocol server directly into the worldserver, enabling AI assistants (like Claude/Cascade) to interact with the game server in real-time.
 
-**Status:** ✅ Phase 1 & 2 Complete (Nov 30, 2025)
+**Status:** ✅ Phase 1, 2 & World Scan Complete (Nov 30, 2025)
+
+**Codename:** "Scarlet Vision" 👁️ - The AI can now SEE inside the game world!
 
 ## 🎉 What This Enables
 
@@ -14,6 +16,7 @@ With this integration, the AI assistant can:
 - **Read client messages** - Receive data from the WoW client via AMS bridge
 - **Write to client** - Send messages that display in the WoW client
 - **Debug in real-time** - Direct access to server state while you're playing
+- **SEE your surroundings** - LIDAR-style spatial awareness using VMAP data!
 
 ## Features
 
@@ -328,3 +331,37 @@ Client Addon → AMS → Server Lua → Eluna API (bypasses GM check)
 - Client: `AMS.Send("HANDLER_NAME", data)` (dot notation, NOT colon!)
 - Server: `AMS.Send(player, "HANDLER_NAME", data)`
 - Never serialize functions - Smallfolk will error
+
+### VMAP Usage (World Scan)
+- Include `VMapFactory.h` AND `VMapManager2.h` for full class definition
+- Use `VMAP::VMapManager2*` not `VMAP::IVMapManager*`
+- `isInLineOfSight()` returns TRUE if CAN see (no obstacle)
+- Binary search for precise wall distance detection
+
+### Database Safety
+- Always use `db_describe` before querying unfamiliar tables
+- TrinityCore 11.x has different column names than older versions
+- Bad SQL can crash the server - wrap in try/catch!
+- All DB tools now have exception handling
+
+### CMake Tips
+- New source files require `cmake ..` re-run to be detected
+- `CollectSourceFiles()` auto-discovers .cpp files in subdirectories
+
+## Session Summary (Nov 30, 2025)
+
+### What We Built Tonight 🚀
+1. **Safe SQL Queries** - All database tools wrapped in try/catch
+2. **Semantic Screenshots** - `/mcpbridge ui` captures UI state
+3. **LIDAR World Scan** - 360° ray casting using VMAP data
+4. **Event Bus Design** - Architecture for unified pub/sub system
+
+### First Successful World Scan
+```
+Location: Scarlet Monastery (2898.6, -802.9, 160.3)
+Facing: 77° East-Northeast
+Creatures: Scarlet Sentry (23y), Disciple (20y), Augur (22y)
+Room: Walls 4-7y behind, corridor opening East
+```
+
+The AI can now SEE your surroundings! 👁️

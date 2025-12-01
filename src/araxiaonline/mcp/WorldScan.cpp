@@ -13,6 +13,7 @@
 #include "GameObject.h"
 #include "Log.h"
 #include "VMapFactory.h"
+#include "VMapManager2.h"
 #include <cmath>
 
 namespace Araxia
@@ -49,7 +50,7 @@ RayCastResult CastRay(Map* map, float startX, float startY, float startZ,
     
     // Use VMAP for line of sight check
     // Note: isInLineOfSight returns true if CAN see (no obstacle)
-    VMAP::IVMapManager* vmgr = VMAP::VMapFactory::createOrGetVMapManager();
+    VMAP::VMapManager2* vmgr = VMAP::VMapFactory::createOrGetVMapManager();
     if (vmgr)
     {
         // Binary search to find collision distance
