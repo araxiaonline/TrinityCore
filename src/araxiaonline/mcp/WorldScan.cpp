@@ -13,7 +13,6 @@
 #include "GameObject.h"
 #include "Log.h"
 #include "VMapFactory.h"
-#include "MMapFactory.h"
 #include <cmath>
 
 namespace Araxia
