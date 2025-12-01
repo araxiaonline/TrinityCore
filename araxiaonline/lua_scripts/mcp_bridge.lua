@@ -117,6 +117,61 @@ local function HandleMCPClientData(player, data)
     print("[MCP Bridge] Client data received: " .. dataType)
 end
 
+-- AMS Handler: Client sends UI state ("semantic screenshot")
+local function HandleMCPUIState(player, data)
+    local playerName = player:GetName()
+    
+    -- Store the UI state for MCP to read
+    -- Convert to JSON-like string for MCP compatibility
+    local uiState = {
+        player = playerName,
+        capturedAt = os.time(),
+        target = data.target,
+        playerInfo = data.player,
+        mouseover = data.mouseover,
+        tooltip = data.tooltip,
+        openFrames = data.openFrames,
+        mcpBridgeStatus = data.mcpBridgeStatus
+    }
+    
+    -- Store as JSON-ish format (simple key-value for MCP)
+    local stateStr = string.format(
+        '{"player":"%s","capturedAt":%d,"hasTarget":%s,"targetName":"%s","targetGuid":"%s","targetLevel":%s,"zone":"%s","openFrames":[%s]}',
+        playerName,
+        os.time(),
+        data.target and "true" or "false",
+        data.target and (data.target.name or "none") or "none",
+        data.target and (data.target.guid or "") or "",
+        data.target and tostring(data.target.level or 0) or "0",
+        data.player and (data.player.zone or "unknown") or "unknown",
+        data.openFrames and ('"' .. table.concat(data.openFrames, '","') .. '"') or ""
+    )
+    
+    SetSharedData("mcp_ui_state", stateStr)
+    
+    -- Also store detailed target info separately if available
+    if data.target then
+        local targetStr = string.format(
+            '{"name":"%s","guid":"%s","level":%d,"health":%d,"healthMax":%d,"creatureType":"%s","isDead":%s}',
+            data.target.name or "unknown",
+            data.target.guid or "",
+            data.target.level or 0,
+            data.target.health or 0,
+            data.target.healthMax or 0,
+            data.target.creatureType or "unknown",
+            data.target.isDead and "true" or "false"
+        )
+        SetSharedData("mcp_current_target", targetStr)
+    else
+        SetSharedData("mcp_current_target", '{"hasTarget":false}')
+    end
+    
+    print("[MCP Bridge] UI state captured for " .. playerName)
+    if data.target then
+        print("[MCP Bridge]   Target: " .. (data.target.name or "none") .. " (Level " .. (data.target.level or "?") .. ")")
+    end
+end
+
 -- Register AMS handlers
 local function RegisterAMSHandlers()
     -- Check if AMS is available
@@ -129,8 +184,9 @@ local function RegisterAMSHandlers()
     AMS.RegisterHandler("MCP_CLIENT_LOG", HandleMCPClientLog)
     AMS.RegisterHandler("MCP_GET_MESSAGES", HandleMCPGetMessages)
     AMS.RegisterHandler("MCP_CLIENT_DATA", HandleMCPClientData)
+    AMS.RegisterHandler("MCP_UI_STATE", HandleMCPUIState)
     
-    print("[MCP Bridge] AMS handlers registered")
+    print("[MCP Bridge] AMS handlers registered (including UI state)")
 end
 
 -- Initialize on load

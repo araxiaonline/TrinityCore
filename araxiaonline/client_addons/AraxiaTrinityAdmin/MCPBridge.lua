@@ -80,6 +80,153 @@ function MCPBridge:OnMCPMessagesReceived(data)
     end
 end
 
+-- ============================================================================
+-- UI State Capture ("Semantic Screenshot")
+-- ============================================================================
+
+-- Get info about current target
+local function GetTargetInfo()
+    if not UnitExists("target") then
+        return nil
+    end
+    
+    return {
+        name = UnitName("target"),
+        guid = UnitGUID("target"),
+        level = UnitLevel("target"),
+        health = UnitHealth("target"),
+        healthMax = UnitHealthMax("target"),
+        healthPct = UnitHealth("target") / math.max(1, UnitHealthMax("target")) * 100,
+        creatureType = UnitCreatureType("target"),
+        classification = UnitClassification("target"),
+        isFriend = UnitIsFriend("player", "target"),
+        isEnemy = UnitIsEnemy("player", "target"),
+        isDead = UnitIsDead("target"),
+        reaction = UnitReaction("player", "target"),
+    }
+end
+
+-- Get player info
+local function GetPlayerInfo()
+    local mapID = C_Map.GetBestMapForUnit("player")
+    local position = mapID and C_Map.GetPlayerMapPosition(mapID, "player")
+    local zoneName = GetZoneText()
+    local subZone = GetSubZoneText()
+    
+    return {
+        name = UnitName("player"),
+        level = UnitLevel("player"),
+        health = UnitHealth("player"),
+        healthMax = UnitHealthMax("player"),
+        healthPct = UnitHealth("player") / math.max(1, UnitHealthMax("player")) * 100,
+        zone = zoneName,
+        subZone = subZone,
+        mapID = mapID,
+        position = position and {x = position.x, y = position.y} or nil,
+        inCombat = UnitAffectingCombat("player"),
+        isResting = IsResting(),
+        isMounted = IsMounted(),
+    }
+end
+
+-- Get list of visible frames (our addon frames)
+local function GetVisibleFrames()
+    local frames = {}
+    
+    -- Check AraxiaTrinityAdmin frames
+    if AraxiaTrinityAdminMainWindow and AraxiaTrinityAdminMainWindow:IsVisible() then
+        table.insert(frames, "MainWindow")
+    end
+    if NPCInfoPanel and NPCInfoPanel:IsVisible() then
+        table.insert(frames, "NPCInfoPanel")
+    end
+    if AddNPCPanel and AddNPCPanel:IsVisible() then
+        table.insert(frames, "AddNPCPanel")
+    end
+    
+    -- Check common game frames
+    if GameMenuFrame and GameMenuFrame:IsVisible() then
+        table.insert(frames, "GameMenu")
+    end
+    if WorldMapFrame and WorldMapFrame:IsVisible() then
+        table.insert(frames, "WorldMap")
+    end
+    if QuestLogFrame and QuestLogFrame:IsVisible() then
+        table.insert(frames, "QuestLog")
+    end
+    if SpellBookFrame and SpellBookFrame:IsVisible() then
+        table.insert(frames, "SpellBook")
+    end
+    
+    return frames
+end
+
+-- Get tooltip text if visible
+local function GetTooltipInfo()
+    if not GameTooltip or not GameTooltip:IsVisible() then
+        return nil
+    end
+    
+    local lines = {}
+    for i = 1, GameTooltip:NumLines() do
+        local textLeft = _G["GameTooltipTextLeft" .. i]
+        if textLeft then
+            local text = textLeft:GetText()
+            if text then
+                table.insert(lines, text)
+            end
+        end
+    end
+    
+    return {
+        numLines = #lines,
+        lines = lines
+    }
+end
+
+-- Get mouseover unit info
+local function GetMouseoverInfo()
+    if not UnitExists("mouseover") then
+        return nil
+    end
+    
+    return {
+        name = UnitName("mouseover"),
+        guid = UnitGUID("mouseover"),
+        level = UnitLevel("mouseover"),
+        creatureType = UnitCreatureType("mouseover"),
+    }
+end
+
+-- Capture full UI state
+function MCPBridge:CaptureUIState()
+    local state = {
+        timestamp = time(),
+        target = GetTargetInfo(),
+        player = GetPlayerInfo(),
+        mouseover = GetMouseoverInfo(),
+        tooltip = GetTooltipInfo(),
+        openFrames = GetVisibleFrames(),
+        mcpBridgeStatus = {
+            enabled = self.enabled,
+            captureChat = self.captureChat,
+            pollInterval = self.pollInterval
+        }
+    }
+    
+    return state
+end
+
+-- Send UI state to server for MCP
+function MCPBridge:SendUIState()
+    if not self.enabled then return end
+    if not AMS then return end
+    
+    local state = self:CaptureUIState()
+    AMS.Send("MCP_UI_STATE", state)
+    print("|cFF00FF00[MCP Bridge]|r UI state sent to server")
+end
+
 -- Register AMS handler for MCP messages
 local function RegisterAMSHandler()
     if not AMS then
@@ -164,12 +311,15 @@ SlashCmdList["MCPBRIDGE"] = function(msg)
     elseif cmd == "poll" then
         StartPolling()
         print("|cFF00FF00[MCP Bridge]|r Polling started")
+    elseif cmd == "ui" or cmd == "snapshot" then
+        MCPBridge:SendUIState()
     else
         print("|cFF00FFFF[MCP Bridge Commands]|r")
         print("  /mcpbridge on|off - Enable/disable bridge")
         print("  /mcpbridge chat on|off - Toggle chat capture")
         print("  /mcpbridge status - Show status")
         print("  /mcpbridge test - Send test message")
+        print("  /mcpbridge ui - Send UI state to MCP (semantic screenshot)")
     end
 end
 

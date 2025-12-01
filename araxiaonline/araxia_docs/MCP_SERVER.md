@@ -220,6 +220,8 @@ MCP Tool → ElunaSharedData → Server Lua → AMS.Send() → Client Addon
 | `mcp_client_chat` | Chat messages from client |
 | `mcp_client_logs` | Log/error messages from client |
 | `mcp_to_client` | Messages from MCP to display on client |
+| `mcp_ui_state` | Full UI state (semantic screenshot) |
+| `mcp_current_target` | Current target info (updated on /mcpbridge ui) |
 
 ### Client Commands
 ```
@@ -227,7 +229,18 @@ MCP Tool → ElunaSharedData → Server Lua → AMS.Send() → Client Addon
 /mcpbridge test     - Send test message to MCP
 /mcpbridge on/off   - Enable/disable bridge
 /mcpbridge poll     - Start polling for MCP messages
+/mcpbridge ui       - Send UI state to MCP (semantic screenshot)
 ```
+
+### Semantic Screenshot
+The `/mcpbridge ui` command captures:
+- **Target info**: Name, GUID, level, health, creature type
+- **Player info**: Position, zone, health, combat status
+- **Mouseover**: What you're hovering over
+- **Tooltip**: Current tooltip text
+- **Open frames**: Which addon panels are visible
+
+AI can read via: `shared_data_read("mcp_current_target")` or `shared_data_read("mcp_ui_state")`
 
 ## Roadmap
 
