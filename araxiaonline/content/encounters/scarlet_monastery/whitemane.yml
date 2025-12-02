@@ -1,0 +1,254 @@
+# High Inquisitor Whitemane & Scarlet Commander Mograine
+# Dual-boss encounter in Scarlet Monastery Cathedral
+# Schema: araxia-content/v1
+# Author: Araxia Team
+
+_schema: araxia-content/v1
+_type: encounter
+
+encounter:
+  # === IDENTITY ===
+  id: sm_whitemane_mograine
+  name: "High Inquisitor Whitemane"
+  description: "The final battle in Scarlet Monastery Cathedral"
+  instance: scarlet_monastery_cathedral
+  
+  # === BOSSES ===
+  bosses:
+    - id: mograine
+      entry: 3976
+      name: "Scarlet Commander Mograine"
+      role: primary
+      spawn_position: [1152.0, 1398.0, 32.0, 6.28]
+      
+    - id: whitemane
+      entry: 3977
+      name: "High Inquisitor Whitemane"
+      role: secondary
+      spawn_position: [1174.0, 1399.0, 32.0, 3.14]
+      initial_state: inactive
+  
+  # === PHASES ===
+  phases:
+    # Phase 1: Fight Mograine while Whitemane prays
+    - id: phase_1
+      name: "Mograine's Stand"
+      description: "Defeat Mograine while Whitemane prays at the altar"
+      
+      until:
+        type: boss_health
+        boss: mograine
+        operator: "<="
+        value: 0
+      
+      mechanics:
+        - boss: mograine
+          behavior: aggressive
+          abilities:
+            - id: crusader_strike
+              spell_id: 14518
+              cooldown: 6s
+              target: current_target
+              
+            - id: hammer_of_justice
+              spell_id: 5588
+              cooldown: 20s
+              target: current_target
+              
+            - id: divine_shield
+              spell_id: 642
+              cooldown: 60s
+              trigger:
+                type: health_below
+                value: 30%
+              duration: 6s
+              
+            - id: lay_on_hands
+              spell_id: 17233
+              cooldown: 300s
+              trigger:
+                type: health_below
+                value: 10%
+              target: self
+              once: true
+        
+        - boss: whitemane
+          behavior: passive
+          script: |
+            -- Whitemane kneels at the altar, praying
+            whitemane:SetReactState(REACT_PASSIVE)
+            whitemane:SetUnitFlags(UNIT_FLAG_IMMUNE_TO_PC)
+            whitemane:Emote(EMOTE_STATE_KNEEL)
+    
+    # Phase 2: Whitemane resurrects Mograine
+    - id: resurrection
+      name: "Resurrection"
+      description: "Whitemane calls upon the Light to resurrect her champion"
+      
+      trigger:
+        type: boss_dead
+        boss: mograine
+      
+      duration: 8s
+      
+      script: |
+        -- Whitemane reacts to Mograine's death
+        whitemane:RemoveUnitFlags(UNIT_FLAG_IMMUNE_TO_PC)
+        whitemane:SetReactState(REACT_AGGRESSIVE)
+        whitemane:Yell("Mograine has fallen? You shall pay for this treachery!")
+        
+        -- Move to Mograine's body
+        whitemane:MoveTo(mograine:GetPosition())
+        
+        -- Wait, then resurrect
+        wait(3)
+        whitemane:Yell("Arise, my champion!")
+        whitemane:CastSpell(SPELL_SCARLET_RESURRECTION, mograine)
+        
+        wait(2)
+        mograine:Resurrect(100)  -- Full health
+        mograine:Yell("At your side, my lady!")
+        mograine:SetReactState(REACT_AGGRESSIVE)
+      
+      # Whitemane is immune during this phase
+      boss_states:
+        whitemane:
+          immune: true
+          interruptible: false
+    
+    # Phase 3: Fight both bosses
+    - id: phase_2
+      name: "Final Stand"
+      description: "Defeat both Whitemane and the resurrected Mograine"
+      
+      enrage:
+        enabled: true
+        timer: 300s
+        buff: soft_enrage
+      
+      mechanics:
+        - boss: whitemane
+          behavior: aggressive
+          priority_target: healer
+          abilities:
+            - id: holy_smite
+              spell_id: 9481
+              cooldown: 3s
+              target: current_target
+              
+            - id: power_word_shield
+              spell_id: 22187
+              cooldown: 15s
+              target: self
+              trigger:
+                type: health_below
+                value: 50%
+              
+            - id: deep_sleep
+              spell_id: 9256
+              cooldown: 30s
+              target: random_player
+              description: "Puts a player to sleep for 10 seconds"
+              
+            - id: heal
+              spell_id: 12039
+              cooldown: 10s
+              target: lowest_health_ally
+              interrupt_priority: high
+        
+        - boss: mograine
+          behavior: aggressive
+          priority_target: tank
+          modifiers:
+            - type: damage_increase
+              value: 25%
+              description: "Enraged after resurrection"
+            - type: attack_speed_increase
+              value: 20%
+          abilities:
+            - id: crusader_strike
+              spell_id: 14518
+              cooldown: 4s  # Faster than phase 1
+              target: current_target
+              
+            - id: retribution_aura
+              spell_id: 8990
+              on_phase_start: true
+              description: "Deals holy damage to attackers"
+  
+  # === VICTORY CONDITIONS ===
+  victory:
+    condition: all_bosses_dead
+    
+  defeat:
+    condition: raid_wipe
+    reset_timer: 30s
+  
+  # === LOOT ===
+  loot:
+    mode: both_dead
+    
+    boss_drops:
+      mograine:
+        - item: 7724   # Gauntlets of Divinity
+          chance: 15%
+        - item: 7726   # Aegis of the Scarlet Commander
+          chance: 12%
+        - item: 10330  # Scarlet Crusade Tabard
+          chance: 5%
+          
+      whitemane:
+        - item: 7720   # Whitemane's Chapeau
+          chance: 15%
+        - item: 7722   # Triune Amulet
+          chance: 12%
+        - item: 10328  # Hand of Righteousness
+          chance: 10%
+    
+    shared_drops:
+      - item: 7728   # Mograine's Might
+        chance: 8%
+      - item: 7730   # Corrupt Conqueror's Gauntlets
+        chance: 10%
+  
+  # === ACHIEVEMENTS ===
+  achievements:
+    - id: sm_speed_kill
+      name: "Rapid Judgment"
+      description: "Defeat Whitemane and Mograine in under 5 minutes"
+      condition:
+        type: time_under
+        value: 300s
+      
+    - id: sm_no_sleep
+      name: "Wide Awake"
+      description: "Defeat Whitemane without any player being affected by Deep Sleep"
+      condition:
+        type: no_debuff
+        spell: deep_sleep
+      
+    - id: sm_no_heal
+      name: "No Second Chances"
+      description: "Kill Mograine before Whitemane can heal him after resurrection"
+      condition:
+        type: prevent_cast
+        boss: whitemane
+        spell: heal
+        after_phase: resurrection
+  
+  # === METADATA ===
+  _meta:
+    author: "Araxia Team"
+    version: "1.0.0"
+    created: "2025-12-01"
+    source: "retail_classic"
+    difficulty: normal
+    tags: [scarlet, monastery, cathedral, dual_boss]
+    tuning:
+      target_level: 40
+      target_group_size: 5
+      target_duration: "5-8 minutes"
+    notes: |
+      Classic WoW encounter faithfully recreated.
+      The resurrection mechanic is the signature moment.
+      Phase 2 requires good healing and interrupt coordination.
