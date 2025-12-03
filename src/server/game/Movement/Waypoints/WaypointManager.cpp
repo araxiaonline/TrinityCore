@@ -237,11 +237,15 @@ void WaypointMgr::VisualizePath(Unit* owner, WaypointPath const* path, Optional<
         if (!summon)
             continue;
 
-        if (displayId)
-        {
-            summon->SetDisplayId(*displayId, true);
-            summon->SetObjectScale(0.5f);
-        }
+        // Always set display - use passed displayId or default to Elven Wisp (1824)
+        constexpr uint32 DEFAULT_WAYPOINT_DISPLAY = 1824;  // Elven Wisp - works in 11.2.5
+        summon->SetDisplayId(displayId.value_or(DEFAULT_WAYPOINT_DISPLAY), true);
+        summon->SetObjectScale(0.5f);
+        
+        // Force client to refresh the creature's appearance
+        // (SetDisplayId alone doesn't update already-spawned creatures on client)
+        summon->DestroyForNearbyPlayers();
+        summon->UpdateObjectVisibilityOnCreate();
 
         _nodeToVisualWaypointGUIDsMap[pathNodePair] = summon->GetGUID();
         _visualWaypointGUIDToNodeMap[summon->GetGUID()] = std::pair<WaypointPath const*, WaypointNode const*>(path, &node);

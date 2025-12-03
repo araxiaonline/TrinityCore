@@ -592,17 +592,15 @@ bool MySQLConnection::_HandleMySQLErrno(uint32 errNo, uint8 attempts /*= 5*/)
         case ER_DUP_ENTRY:
             return false;
 
-        // Outdated table or database structure - terminate core
+        // Outdated table or database structure - log error but don't terminate
+        // (Changed from ABORT to allow recovery from bad external queries like MCP)
         case ER_BAD_FIELD_ERROR:
         case ER_NO_SUCH_TABLE:
-            TC_LOG_ERROR("sql.sql", "Your database structure is not up to date. Please make sure you've executed all queries in the sql/updates folders.");
-            std::this_thread::sleep_for(std::chrono::seconds(10));
-            ABORT();
+            TC_LOG_ERROR("sql.sql", "Database structure error (bad field or missing table). Query failed but server will continue.");
+            TC_LOG_ERROR("sql.sql", "If this is a schema issue, run sql/updates. If from external query (MCP), fix the query.");
             return false;
         case ER_PARSE_ERROR:
-            TC_LOG_ERROR("sql.sql", "Error while parsing SQL. Core fix required.");
-            std::this_thread::sleep_for(std::chrono::seconds(10));
-            ABORT();
+            TC_LOG_ERROR("sql.sql", "Error while parsing SQL. Query failed but server will continue.");
             return false;
         default:
             TC_LOG_ERROR("sql.sql", "Unhandled MySQL errno {}. Unexpected behaviour possible.", errNo);

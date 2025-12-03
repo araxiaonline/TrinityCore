@@ -1575,12 +1575,16 @@ namespace LuaCreature
         // Optional player parameter for phase inheritance (arg 2)
         Player* phaseSource = E->CHECKOBJ<Player>(2, false);
         
-        // Optional display ID parameter (arg 3, or arg 2 if no player provided)
+        // Display ID is always arg 3 when player is provided
         Optional<uint32> displayId;
-        int displayIdArg = phaseSource ? 3 : 2;
-        if (!lua_isnoneornil(E->L, displayIdArg))
+        if (!lua_isnoneornil(E->L, 3))
         {
-            displayId = E->CHECKVAL<uint32>(displayIdArg);
+            displayId = E->CHECKVAL<uint32>(3);
+        }
+        else if (!phaseSource && !lua_isnoneornil(E->L, 2) && lua_isnumber(E->L, 2))
+        {
+            // If no player but arg 2 is a number, use it as displayId
+            displayId = E->CHECKVAL<uint32>(2);
         }
         
         sWaypointMgr->VisualizePath(creature, path, displayId);
