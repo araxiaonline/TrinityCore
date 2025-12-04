@@ -8,12 +8,17 @@
 #include "Player.h"
 #include "ObjectAccessor.h"
 #include "Map.h"
+#include "MapManager.h"
+#include "PhasingHandler.h"
 #include "World.h"
 #include "Creature.h"
 #include "GameObject.h"
 #include "Log.h"
 #include "VMapFactory.h"
 #include "VMapManager2.h"
+#include "VMapDefinitions.h"
+#include "DatabaseEnv.h"
+#include "StringFormat.h"
 #include <cmath>
 
 namespace Araxia
@@ -256,8 +261,198 @@ std::string GenerateAsciiMap(const json& scanData, int size = 21)
     return result;
 }
 
+// Get ground height at a specific coordinate
+// First tries VMAP (works if map is loaded), then falls back to DB lookup
+float GetGroundHeightAt(uint32 mapId, float x, float y, bool* usedDatabase = nullptr)
+{
+    if (usedDatabase)
+        *usedDatabase = false;
+    
+    // First try: Use Map if a player is on it
+    Map* map = sMapMgr->FindMap(mapId, 0);
+    if (!map)
+    {
+        // Find a player on this map to get Map instance
+        SessionMap const& sessions = sWorld->GetAllSessions();
+        for (auto const& [id, session] : sessions)
+        {
+            if (session && session->GetPlayer() && session->GetPlayer()->GetMapId() == mapId)
+            {
+                map = session->GetPlayer()->GetMap();
+                break;
+            }
+        }
+    }
+    
+    if (map)
+    {
+        constexpr float START_Z = 5000.0f;
+        constexpr float MAX_SEARCH_DIST = 10000.0f;
+        float groundZ = map->GetHeight(PhasingHandler::GetEmptyPhaseShift(), x, y, START_Z, true, MAX_SEARCH_DIST);
+        
+        if (groundZ != VMAP_INVALID_HEIGHT_VALUE && groundZ > -100000.0f)
+            return groundZ;
+    }
+    
+    // Fallback: Query nearest creature Z from database
+    // This is a practical approximation when map data isn't loaded
+    try
+    {
+        std::string query = Trinity::StringFormat(
+            "SELECT position_z FROM creature "
+            "WHERE map = {} AND "
+            "ABS(position_x - {}) < 50 AND ABS(position_y - {}) < 50 "
+            "ORDER BY SQRT(POW(position_x - {}, 2) + POW(position_y - {}, 2)) "
+            "LIMIT 1",
+            mapId, x, y, x, y);
+        
+        QueryResult result = WorldDatabase.Query(query.c_str());
+        
+        if (result)
+        {
+            Field* fields = result->Fetch();
+            if (usedDatabase)
+                *usedDatabase = true;
+            return fields[0].GetFloat();
+        }
+    }
+    catch (...) { }
+    
+    return 0.0f;  // No height found
+}
+
 void RegisterWorldScanTools()
 {
+    // get_ground_height - Get Z coordinate for X,Y position(s)
+    sMCPServer->RegisterTool(
+        "get_ground_height",
+        "Get ground Z height for given X,Y coordinates on a map. Supports single point or batch of up to 100 points.",
+        {
+            {"type", "object"},
+            {"properties", {
+                {"mapId", {
+                    {"type", "integer"},
+                    {"description", "Map ID (e.g., 870 for Pandaria)"}
+                }},
+                {"x", {
+                    {"type", "number"},
+                    {"description", "X coordinate (for single point lookup)"}
+                }},
+                {"y", {
+                    {"type", "number"},
+                    {"description", "Y coordinate (for single point lookup)"}
+                }},
+                {"points", {
+                    {"type", "array"},
+                    {"description", "Array of {x, y} objects for batch lookup (max 100)"},
+                    {"items", {
+                        {"type", "object"},
+                        {"properties", {
+                            {"x", {{"type", "number"}}},
+                            {"y", {{"type", "number"}}}
+                        }}
+                    }}
+                }}
+            }},
+            {"required", {"mapId"}}
+        },
+        [](const json& params) -> json {
+            try
+            {
+                uint32 mapId = params.value("mapId", 0u);
+                
+                if (mapId == 0)
+                {
+                    return {{"success", false}, {"error", "mapId is required"}};
+                }
+                
+                // Check if batch or single point
+                if (params.contains("points") && params["points"].is_array())
+                {
+                    // Batch mode
+                    auto& points = params["points"];
+                    if (points.size() > 100)
+                    {
+                        return {{"success", false}, {"error", "Maximum 100 points per batch"}};
+                    }
+                    
+                    json results = json::array();
+                    int found = 0;
+                    int notFound = 0;
+                    
+                    int dbUsed = 0;
+                    for (const auto& point : points)
+                    {
+                        float x = point.value("x", 0.0f);
+                        float y = point.value("y", 0.0f);
+                        bool usedDb = false;
+                        float z = GetGroundHeightAt(mapId, x, y, &usedDb);
+                        
+                        if (z != 0.0f)
+                        {
+                            found++;
+                            if (usedDb) dbUsed++;
+                            results.push_back({{"x", x}, {"y", y}, {"z", z}, {"source", usedDb ? "database" : "vmap"}});
+                        }
+                        else
+                        {
+                            notFound++;
+                            results.push_back({{"x", x}, {"y", y}, {"z", nullptr}, {"error", "No ground found"}});
+                        }
+                    }
+                    
+                    TC_LOG_INFO("araxia.mcp", "[MCP] Ground height batch: %d found (%d from DB), %d not found", 
+                                found, dbUsed, notFound);
+                    
+                    return {
+                        {"success", true},
+                        {"mapId", mapId},
+                        {"results", results},
+                        {"found", found},
+                        {"fromDatabase", dbUsed},
+                        {"notFound", notFound}
+                    };
+                }
+                else
+                {
+                    // Single point mode
+                    float x = params.value("x", 0.0f);
+                    float y = params.value("y", 0.0f);
+                    bool usedDb = false;
+                    float z = GetGroundHeightAt(mapId, x, y, &usedDb);
+                    
+                    if (z != 0.0f)
+                    {
+                        TC_LOG_INFO("araxia.mcp", "[MCP] Ground height at (%.2f, %.2f) on map %u = %.2f (source: %s)",
+                                    x, y, mapId, z, usedDb ? "database" : "vmap");
+                        return {
+                            {"success", true},
+                            {"mapId", mapId},
+                            {"x", x},
+                            {"y", y},
+                            {"z", z},
+                            {"source", usedDb ? "database" : "vmap"}
+                        };
+                    }
+                    else
+                    {
+                        return {
+                            {"success", false},
+                            {"error", "No ground found - try having a player on the map, or ensure nearby creatures exist in DB"},
+                            {"mapId", mapId},
+                            {"x", x},
+                            {"y", y}
+                        };
+                    }
+                }
+            }
+            catch (const std::exception& e)
+            {
+                return {{"success", false}, {"error", std::string("Exception: ") + e.what()}};
+            }
+        }
+    );
+    
     // world_scan - LIDAR-style room scan
     sMCPServer->RegisterTool(
         "world_scan",
@@ -346,7 +541,7 @@ void RegisterWorldScanTools()
         }
     );
     
-    TC_LOG_INFO("araxia.mcp", "[MCP] World scan tools registered");
+    TC_LOG_INFO("araxia.mcp", "[MCP] World scan tools registered (world_scan, get_ground_height)");
 }
 
 } // namespace Araxia

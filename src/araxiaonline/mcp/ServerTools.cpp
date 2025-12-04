@@ -14,6 +14,7 @@
 #include "GitRevision.h"
 #include "GameTime.h"
 #include "LuaEngine/ElunaSharedData.h"
+#include <sstream>
 
 namespace Araxia
 {
@@ -144,23 +145,169 @@ void RegisterServerTools()
             if (!command.empty() && command[0] == '.')
                 command = command.substr(1);
             
-            TC_LOG_INFO("araxia.mcp", "[MCP] Executing GM command: .%s (player context: %s)", 
-                        command.c_str(), playerName.empty() ? "none" : playerName.c_str());
+            TC_LOG_INFO("araxia.mcp", "[MCP] GM command: .%s (player: %s)", 
+                        command.c_str(), playerName.empty() ? "first online" : playerName.c_str());
             
-            // Find player session if specified (for future ChatHandler integration)
-            // TODO: Implement proper command execution via ChatHandler
+            // Find the player
+            Player* player = nullptr;
             if (!playerName.empty())
             {
-                Player* player = ObjectAccessor::FindPlayerByName(playerName);
-                (void)player; // Suppress unused warning until ChatHandler is implemented
+                player = ObjectAccessor::FindPlayerByName(playerName);
+            }
+            else
+            {
+                // Use first online player
+                SessionMap const& sessions = sWorld->GetAllSessions();
+                for (auto const& [id, session] : sessions)
+                {
+                    if (session && session->GetPlayer())
+                    {
+                        player = session->GetPlayer();
+                        break;
+                    }
+                }
             }
             
+            if (!player)
+                return {{"success", false}, {"error", "No player found"}};
+            
+            // Parse and execute common commands directly
+            std::istringstream iss(command);
+            std::string cmd;
+            iss >> cmd;
+            
+            // Handle: go xyz X Y Z [mapId]
+            if (cmd == "go")
+            {
+                std::string subcmd;
+                iss >> subcmd;
+                
+                if (subcmd == "xyz")
+                {
+                    float x, y, z;
+                    uint32 mapId = player->GetMapId();
+                    
+                    if (!(iss >> x >> y >> z))
+                        return {{"success", false}, {"error", "Usage: go xyz X Y Z [mapId]"}};
+                    
+                    iss >> mapId;  // Optional map ID
+                    
+                    // Teleport the player
+                    if (mapId != player->GetMapId())
+                    {
+                        player->TeleportTo(mapId, x, y, z, player->GetOrientation());
+                    }
+                    else
+                    {
+                        player->NearTeleportTo(x, y, z, player->GetOrientation());
+                    }
+                    
+                    TC_LOG_INFO("araxia.mcp", "[MCP] Teleported %s to (%.2f, %.2f, %.2f) map %u",
+                                player->GetName().c_str(), x, y, z, mapId);
+                    
+                    return {
+                        {"success", true},
+                        {"command", "go xyz"},
+                        {"player", player->GetName()},
+                        {"teleported", {
+                            {"x", x}, {"y", y}, {"z", z}, {"map", mapId}
+                        }}
+                    };
+                }
+            }
+            // Handle: tele <location>
+            else if (cmd == "tele")
+            {
+                // For now just support coordinates: tele X Y Z mapId
+                float x, y, z;
+                uint32 mapId;
+                
+                if (iss >> x >> y >> z >> mapId)
+                {
+                    player->TeleportTo(mapId, x, y, z, player->GetOrientation());
+                    
+                    return {
+                        {"success", true},
+                        {"command", "tele"},
+                        {"player", player->GetName()},
+                        {"teleported", {
+                            {"x", x}, {"y", y}, {"z", z}, {"map", mapId}
+                        }}
+                    };
+                }
+                
+                return {{"success", false}, {"error", "Usage: tele X Y Z mapId"}};
+            }
+            // Handle: gps - Get player location
+            else if (cmd == "gps")
+            {
+                return {
+                    {"success", true},
+                    {"command", "gps"},
+                    {"player", player->GetName()},
+                    {"position", {
+                        {"x", player->GetPositionX()},
+                        {"y", player->GetPositionY()},
+                        {"z", player->GetPositionZ()},
+                        {"o", player->GetOrientation()},
+                        {"map", player->GetMapId()},
+                        {"zone", player->GetZoneId()},
+                        {"area", player->GetAreaId()}
+                    }}
+                };
+            }
+            // Handle: additem <itemId> [count]
+            else if (cmd == "additem")
+            {
+                uint32 itemId, count = 1;
+                if (!(iss >> itemId))
+                    return {{"success", false}, {"error", "Usage: additem <itemId> [count]"}};
+                iss >> count;
+                
+                player->AddItem(itemId, count);
+                
+                return {
+                    {"success", true},
+                    {"command", "additem"},
+                    {"player", player->GetName()},
+                    {"item", itemId},
+                    {"count", count}
+                };
+            }
+            // Handle: die - Kill target or self
+            else if (cmd == "die")
+            {
+                Unit* target = player->GetSelectedUnit();
+                if (!target)
+                    target = player;
+                
+                target->KillSelf();
+                
+                return {
+                    {"success", true},
+                    {"command", "die"},
+                    {"killed", target == player ? player->GetName() : "target"}
+                };
+            }
+            // Handle: revive
+            else if (cmd == "revive")
+            {
+                player->ResurrectPlayer(1.0f);
+                player->SpawnCorpseBones();
+                
+                return {
+                    {"success", true},
+                    {"command", "revive"},
+                    {"player", player->GetName()}
+                };
+            }
+            
+            // Unknown command
             return {
-                {"success", true},
-                {"command", command},
-                {"player", playerName},
-                {"message", "Command logged. Note: Full command execution requires integration with ChatHandler."},
-                {"note", "Use 'reload eluna' for Lua script reloading."}
+                {"success", false},
+                {"error", "Unknown or unimplemented command"},
+                {"command", cmd},
+                {"supported", {"go xyz", "tele", "gps", "additem", "die", "revive"}}
             };
         }
     );
