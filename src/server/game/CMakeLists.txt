@@ -42,9 +42,34 @@ target_link_libraries(game-interface
 # Create lualib interface target for LuaEngine
 set(LUA_VERSION "luajit")
 add_library(lualib INTERFACE)
+
+# Set LuaJIT paths based on platform
+if(APPLE)
+  # macOS with Homebrew - detect Homebrew prefix dynamically
+  execute_process(
+    COMMAND brew --prefix luajit
+    OUTPUT_VARIABLE HOMEBREW_LUAJIT_PREFIX
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+  if(HOMEBREW_LUAJIT_PREFIX)
+    set(LUAJIT_INCLUDE_DIR "${HOMEBREW_LUAJIT_PREFIX}/include/luajit-2.1")
+    set(LUAJIT_LIBRARY_DIR "${HOMEBREW_LUAJIT_PREFIX}/lib")
+  else()
+    # Fallback to common Homebrew path
+    set(LUAJIT_INCLUDE_DIR "/opt/homebrew/opt/luajit/include/luajit-2.1")
+    set(LUAJIT_LIBRARY_DIR "/opt/homebrew/opt/luajit/lib")
+  endif()
+else()
+  # Linux - standard system paths
+  set(LUAJIT_INCLUDE_DIR "/usr/include/luajit-2.1")
+  set(LUAJIT_LIBRARY_DIR "/usr/lib")
+endif()
+
 target_include_directories(lualib INTERFACE 
-  /usr/include/luajit-2.1
+  ${LUAJIT_INCLUDE_DIR}
   ${CMAKE_SOURCE_DIR}/dep/efsw/include)
+target_link_directories(lualib INTERFACE ${LUAJIT_LIBRARY_DIR})
 target_link_libraries(lualib INTERFACE luajit-5.1 efsw)
 target_compile_definitions(lualib INTERFACE ELUNA LUAJIT_VERSION ELUNA_TRINITY ELUNA_EXPANSION=9)
 
@@ -54,7 +79,7 @@ add_library(game
 target_include_directories(game
   PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
-    /usr/include/luajit-2.1)
+    ${LUAJIT_INCLUDE_DIR})
 
 target_link_libraries(game
   PRIVATE
