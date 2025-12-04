@@ -17,6 +17,51 @@ end
 local Smallfolk = require("smallfolk")
 
 -- ============================================================================
+-- Configurable Display IDs (can be changed via shared data without recompile)
+-- ============================================================================
+
+-- Default display IDs - these can be overridden via SetSharedData
+local DEFAULT_DISPLAYS = {
+    waypoint_marker = 1824,       -- Elven Wisp (works in 11.2.5)
+    waypoint_highlight = 1824,    -- Same as marker but scaled up (highlight via size)
+    spawn_marker = 31366,         -- Green targeting circle
+}
+
+-- Get a display ID, checking shared data first, then falling back to default
+local function GetDisplayId(key)
+    local sharedKey = "config_display_" .. key
+    local value = GetSharedData(sharedKey)
+    if value and value ~= "" then
+        local num = tonumber(value)
+        if num then
+            return num
+        end
+    end
+    return DEFAULT_DISPLAYS[key] or 17188
+end
+
+-- Set a display ID in shared data (persists until server restart)
+local function SetDisplayIdConfig(key, displayId)
+    local sharedKey = "config_display_" .. key
+    SetSharedData(sharedKey, tostring(displayId))
+    print("[Admin Handlers] Display config updated: " .. key .. " = " .. displayId)
+end
+
+-- Initialize display configs from defaults (only if not already set)
+local function InitDisplayConfigs()
+    for key, defaultValue in pairs(DEFAULT_DISPLAYS) do
+        local sharedKey = "config_display_" .. key
+        if not HasSharedData(sharedKey) then
+            SetSharedData(sharedKey, tostring(defaultValue))
+        end
+    end
+    print("[Admin Handlers] Display configs initialized")
+end
+
+-- Initialize on load
+InitDisplayConfigs()
+
+-- ============================================================================
 -- Helper Functions
 -- ============================================================================
 
@@ -292,9 +337,13 @@ AMS.RegisterHandler("SHOW_WAYPOINTS", function(player, data)
     -- Clear any existing visualization first (fixes state after Clear All)
     pcall(function() creature:DevisualizeWaypointPath() end)
     
+    -- Get configurable display ID for waypoint markers
+    local displayId = GetDisplayId("waypoint_marker")
+    print("[Admin Handlers] SHOW_WAYPOINTS: Using displayId " .. tostring(displayId))
+    
     -- Visualize the path (spawns marker creatures at each waypoint)
-    -- Pass player to inherit their phase (makes markers visible without GM mode)
-    local success, err = pcall(function() return creature:VisualizeWaypointPath(player) end)
+    -- Pass player to inherit their phase, and displayId for marker appearance
+    local success, err = pcall(function() return creature:VisualizeWaypointPath(player, displayId) end)
     if not success then
         print("[Admin Handlers] SHOW_WAYPOINTS: Error calling VisualizeWaypointPath:", err)
     end
@@ -755,8 +804,8 @@ AMS.RegisterHandler("SELECT_WAYPOINT", function(player, data)
     end
     
     -- Highlight the new waypoint marker by changing its display
-    -- Display IDs to try: 17519 (red orb), 17188 (blue orb), 26754 (green flame), 11686 (purple crystal)
-    local highlightDisplayId = 17519  -- Red glowing orb - very visible
+    -- Display ID is configurable via shared data (key: config_display_waypoint_highlight)
+    local highlightDisplayId = GetDisplayId("waypoint_highlight")
     local success = HighlightWaypointMarker(player, pathId, nodeId, highlightDisplayId)
     
     if success then
@@ -812,6 +861,46 @@ AMS.RegisterHandler("GET_PLAYER_DATA", function(player, data)
     AMS.Send(player, "PLAYER_DATA_RESPONSE", {
         success = true,
         isGM = player:IsGM()
+    })
+end)
+
+-- Set display config (for MCP to change waypoint marker appearance)
+-- Keys: waypoint_marker, waypoint_highlight, spawn_marker
+AMS.RegisterHandler("SET_DISPLAY_CONFIG", function(player, data)
+    if not data or not data.key or not data.displayId then
+        print("[Admin Handlers] SET_DISPLAY_CONFIG: Missing key or displayId")
+        return
+    end
+    
+    local key = data.key
+    local displayId = tonumber(data.displayId)
+    
+    if not displayId then
+        print("[Admin Handlers] SET_DISPLAY_CONFIG: Invalid displayId")
+        return
+    end
+    
+    SetDisplayIdConfig(key, displayId)
+    
+    print("[Admin Handlers] SET_DISPLAY_CONFIG: Set " .. key .. " = " .. displayId)
+    AMS.Send(player, "DISPLAY_CONFIG_RESPONSE", {
+        success = true,
+        key = key,
+        displayId = displayId,
+        message = "Display config updated. Re-show waypoints to see changes."
+    })
+end)
+
+-- Get current display configs
+AMS.RegisterHandler("GET_DISPLAY_CONFIGS", function(player, data)
+    local configs = {}
+    for key, _ in pairs(DEFAULT_DISPLAYS) do
+        configs[key] = GetDisplayId(key)
+    end
+    
+    AMS.Send(player, "DISPLAY_CONFIGS_RESPONSE", {
+        success = true,
+        configs = configs
     })
 end)
 

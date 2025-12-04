@@ -365,3 +365,47 @@ Room: Walls 4-7y behind, corridor opening East
 ```
 
 The AI can now SEE your surroundings! 👁️
+
+## Session Summary (Dec 3, 2025)
+
+### New MCP Tools Added 🚀
+
+**`get_ground_height`** - Ground Z coordinate lookup
+- Uses VMAP when map is loaded (player on map)
+- Falls back to database (nearest creature Z within 50 yards)
+- Batch mode: up to 100 points at once
+- Returns `source: "vmap"` or `source: "database"`
+
+**`gm_command`** - Direct GM command execution (no longer a stub!)
+- `go xyz X Y Z [mapId]` - Teleport to coordinates
+- `tele X Y Z mapId` - Teleport with map
+- `gps` - Get current position, zone, area
+- `additem <itemId> [count]` - Give item to player
+- `die` - Kill target or self
+- `revive` - Resurrect player
+
+### Key Learnings
+
+**TrinityCore 11.x API Differences:**
+- `Map::GetHeight()` requires `PhaseShift` parameter
+- Use `PhasingHandler::GetEmptyPhaseShift()` for global lookups
+- `MapManager.h` not `MapMgr.h`
+- `sMapMgr->FindMap(mapId, 0)` for world maps
+
+**VMAP Height Lookup:**
+- Map must be loaded (player needs to be on map) for VMAP access
+- Use database fallback for unloaded maps
+- TrinityCore auto-snaps creatures to ground when spawning with Z=0
+
+### Jade Forest Import Validated ✅
+- 1,767 creature templates imported
+- 6,540 creature spawns working
+- Wowhead coords → World coords conversion working
+- Spawns appear correctly in-game with proper Z heights
+
+### Files Modified
+```
+src/araxiaonline/mcp/
+├── WorldScan.cpp     # Added GetGroundHeightAt()
+└── ServerTools.cpp   # Implemented gm_command
+```
