@@ -222,17 +222,30 @@ void WaypointMgr::VisualizePath(Unit* owner, WaypointPath const* path, Optional<
 
         auto itr = _nodeToVisualWaypointGUIDsMap.find(pathNodePair);
         if (itr != _nodeToVisualWaypointGUIDsMap.end())
-            continue;
+        {
+            // Validate that the tracked creature still exists
+            Creature* existingMarker = ObjectAccessor::GetCreature(*owner, itr->second);
+            if (existingMarker)
+                continue;  // Marker exists, skip
+            
+            // Marker is gone (stale entry), clean up and respawn
+            _visualWaypointGUIDToNodeMap.erase(itr->second);
+            _nodeToVisualWaypointGUIDsMap.erase(pathNodePair);
+        }
 
         TempSummon* summon = owner->SummonCreature(VISUAL_WAYPOINT, node.X, node.Y, node.Z, node.Orientation ? *node.Orientation : 0.0f);
         if (!summon)
             continue;
 
-        if (displayId)
-        {
-            summon->SetDisplayId(*displayId, true);
-            summon->SetObjectScale(0.5f);
-        }
+        // Always set display - use passed displayId or default to Elven Wisp (1824)
+        constexpr uint32 DEFAULT_WAYPOINT_DISPLAY = 1824;  // Elven Wisp - works in 11.2.5
+        summon->SetDisplayId(displayId.value_or(DEFAULT_WAYPOINT_DISPLAY), true);
+        summon->SetObjectScale(0.5f);
+        
+        // Force client to refresh the creature's appearance
+        // (SetDisplayId alone doesn't update already-spawned creatures on client)
+        summon->DestroyForNearbyPlayers();
+        summon->UpdateObjectVisibilityOnCreate();
 
         _nodeToVisualWaypointGUIDsMap[pathNodePair] = summon->GetGUID();
         _visualWaypointGUIDToNodeMap[summon->GetGUID()] = std::pair<WaypointPath const*, WaypointNode const*>(path, &node);
@@ -248,15 +261,44 @@ void WaypointMgr::DevisualizePath(Unit* owner, WaypointPath const* path)
         if (itr == _nodeToVisualWaypointGUIDsMap.end())
             continue;
 
-        Creature* creature = ObjectAccessor::GetCreature(*owner, itr->second);
-        if (!creature)
-            continue;
-
-        _visualWaypointGUIDToNodeMap.erase(itr->second);
+        // Always clean up the maps, even if creature is already gone
+        ObjectGuid markerGuid = itr->second;
+        _visualWaypointGUIDToNodeMap.erase(markerGuid);
         _nodeToVisualWaypointGUIDsMap.erase(pathNodePair);
 
-        creature->DespawnOrUnsummon();
+        // Try to despawn the creature if it still exists
+        if (owner)
+        {
+            if (Creature* creature = ObjectAccessor::GetCreature(*owner, markerGuid))
+                creature->DespawnOrUnsummon();
+        }
     }
+}
+
+void WaypointMgr::ClearAllVisualizations(Unit* owner)
+{
+    // Despawn all tracked visual waypoint creatures and clear tracking maps
+    for (auto const& pair : _nodeToVisualWaypointGUIDsMap)
+    {
+        if (owner)
+        {
+            if (Creature* creature = ObjectAccessor::GetCreature(*owner, pair.second))
+                creature->DespawnOrUnsummon();
+        }
+    }
+    
+    _nodeToVisualWaypointGUIDsMap.clear();
+    _visualWaypointGUIDToNodeMap.clear();
+}
+
+bool WaypointMgr::IsPathVisualized(uint32 pathId) const
+{
+    for (auto const& pair : _nodeToVisualWaypointGUIDsMap)
+    {
+        if (pair.first.first == pathId)
+            return true;
+    }
+    return false;
 }
 
 void WaypointMgr::MoveNode(WaypointPath const* path, WaypointNode const* node, Position const& pos)
@@ -359,4 +401,15 @@ void WaypointPath::BuildSegments()
         if (i + 1 != Nodes.size() && Nodes[i].Delay)
             ContinuousSegments.emplace_back(i, 1);
     }
+}
+
+bool WaypointMgr::GetPathAndNodeByVisualGUID(ObjectGuid guid, uint32& outPathId, uint32& outNodeId) const
+{
+    auto itr = _visualWaypointGUIDToNodeMap.find(guid);
+    if (itr == _visualWaypointGUIDToNodeMap.end())
+        return false;
+    
+    outPathId = itr->second.first->Id;
+    outNodeId = itr->second.second->Id;
+    return true;
 }

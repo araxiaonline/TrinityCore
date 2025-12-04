@@ -1,0 +1,88 @@
+services:
+  trinitycore-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    container_name: trinitycore-dev
+    hostname: trinitycore-dev
+    
+    # Keep container running
+    command: sleep infinity
+    
+    # Volume mounts
+    volumes:
+      # Source code (mounted by devcontainer)
+      - ..:/workspace:cached
+      
+      # Mount TrinityServerBits directories
+      # Adjust the path on the left side to match your local TrinityServerBits location
+      - ../../TrinityServerBits/etc/worldserver.conf:/opt/trinitycore/etc/worldserver.conf:ro
+      - ../../TrinityServerBits/client_files_11.2.5.63834:/opt/trinitycore/data:ro
+      - ../../TrinityServerBits/lua_scripts:/opt/trinitycore/lua_scripts:rw
+      - ../../TrinityServerBits/logs:/opt/trinitycore/logs:rw
+      
+      # Persistent build cache
+      - build-cache:/workspace/build
+      - ccache:/workspace/.ccache
+    
+    # Network configuration
+    networks:
+      - trinitycore-dev
+    
+    # Port mappings
+    ports:
+      - "8087:8087"   # World server
+      - "7878:7878"   # SOAP
+    
+    # Environment variables
+    environment:
+      # Build configuration
+      - CMAKE_BUILD_TYPE=RelWithDebInfo
+      - BUILD_THREADS=4
+      
+      # Database connection (external database)
+      # Update these to match your external database configuration
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-trinity}
+      - DB_PASSWORD=${DB_PASSWORD:-trinity}
+      - DB_AUTH=${DB_AUTH:-auth}
+      - DB_CHARACTERS=${DB_CHARACTERS:-characters}
+      - DB_WORLD=${DB_WORLD:-world}
+      
+      # TrinityCore paths
+      - TRINITY_SOURCE_DIR=/workspace
+      - TRINITY_BUILD_DIR=/workspace/build
+      - TRINITY_DATA_DIR=/opt/trinitycore/data
+      - TRINITY_CONFIG_DIR=/opt/trinitycore/etc
+      - TRINITY_LOGS_DIR=/opt/trinitycore/logs
+      - TRINITY_LUA_DIR=/opt/trinitycore/lua_scripts
+      
+      # Development settings
+      - CCACHE_DIR=/workspace/.ccache
+      - CCACHE_MAXSIZE=5G
+    
+    # Add extra hosts for connecting to services on host machine
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    # Resource limits (adjust based on your system)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+
+networks:
+  trinitycore-dev:
+    driver: bridge
+
+volumes:
+  build-cache:
+    driver: local
+  ccache:
+    driver: local

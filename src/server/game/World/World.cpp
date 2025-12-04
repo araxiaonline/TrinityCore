@@ -24,6 +24,7 @@
 #include "LuaEngine/ElunaMgr.h"
 #include "LuaEngine/ElunaConfig.h"
 #include "LuaEngine/ElunaLoader.h"
+#include "AraxiaMCPServer.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AreaTriggerDataStore.h"
@@ -186,6 +187,9 @@ Eluna* World::GetEluna() const
 /// World destructor
 World::~World()
 {
+    ///- Shutdown Araxia MCP Server
+    sMCPServer->Shutdown();
+
     ///- Empty the kicked session set
     while (!m_sessions.empty())
     {
@@ -2105,6 +2109,10 @@ bool World::SetInitialWorldSettings()
         sElunaMgr->Create(nullptr, *_elunaInfo);
     }
 
+    ///- Initialize Araxia MCP Server (AI assistant integration)
+    TC_LOG_INFO("server.loading", "Initializing Araxia MCP Server...");
+    sMCPServer->Initialize();
+
     uint32 startupDuration = GetMSTimeDiffToNow(startupBegin);
 
     TC_LOG_INFO("server.worldserver", "World initialized in {} minutes {} seconds", startupDuration / 60000, startupDuration % 60000 / 1000);
@@ -2161,6 +2169,10 @@ void World::Update(uint32 diff)
     time_t currentGameTime = GameTime::GetGameTime();
 
     sWorldUpdateTime.UpdateWithDiff(diff);
+
+    ///- Update Eluna (process reload flag, timed events, async queries)
+    if (Eluna* e = GetEluna())
+        e->UpdateEluna(diff);
 
     ///- Update the different timers
     for (int i = 0; i < WUPDATE_COUNT; ++i)

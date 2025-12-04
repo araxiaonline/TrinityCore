@@ -250,7 +250,7 @@ void Eluna::RunScripts()
         if (ExecuteCall(1, 0))
         {
             // Successfully called require on the script
-            ELUNA_LOG_DEBUG("[Eluna]: Successfully loaded `%s`", it->filepath.c_str());
+            ELUNA_LOG_INFO("[Eluna]: Loaded script: %s", it->filepath.c_str());
             ++count;
             continue;
         }

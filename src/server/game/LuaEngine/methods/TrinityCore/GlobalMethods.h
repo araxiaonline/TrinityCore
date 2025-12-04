@@ -8,6 +8,8 @@
 #define GLOBALMETHODS_H
 
 #include "BindingMap.h"
+#include "ElunaSharedData.h"
+#include "lmarshal.h"
 
 /***
  * These functions can be used anywhere at any time, including at start-up.
@@ -3271,6 +3273,287 @@ namespace LuaGlobalFunctions
         return 0;
     }
 
+    /**
+     * Sets a shared data string accessible from all Eluna states.
+     * Enables cross-state communication for features like message reassembly.
+     * NOTE: Value must be a string. Use Smallfolk to serialize tables in Lua.
+     *
+     * @param string key : unique identifier for the data
+     * @param string value : string value to store
+     */
+    int SetSharedData(Eluna* E)
+    {
+        const char* key = E->CHECKVAL<const char*>(1);
+        const char* value = E->CHECKVAL<const char*>(2);
+        
+        sElunaSharedData->Set(std::string(key), std::string(value));
+        return 0;
+    }
+
+    /**
+     * Gets a shared data string accessible from all Eluna states.
+     *
+     * @param string key : unique identifier for the data
+     * @return string value : the stored string, or nil if not found
+     */
+    int GetSharedData(Eluna* E)
+    {
+        const char* key = E->CHECKVAL<const char*>(1);
+        
+        std::string value;
+        if (!sElunaSharedData->Get(std::string(key), value))
+        {
+            E->Push();  // Push nil
+            return 1;
+        }
+        
+        E->Push(value);
+        return 1;
+    }
+
+    /**
+     * Clears a shared data value.
+     *
+     * @param string key : unique identifier for the data to clear
+     */
+    int ClearSharedData(Eluna* E)
+    {
+        const char* key = E->CHECKVAL<const char*>(1);
+        sElunaSharedData->Clear(key);
+        return 0;
+    }
+
+    /**
+     * Checks if a shared data key exists.
+     *
+     * @param string key : unique identifier to check
+     * @return bool exists : true if the key exists
+     */
+    int HasSharedData(Eluna* E)
+    {
+        const char* key = E->CHECKVAL<const char*>(1);
+        E->Push(sElunaSharedData->Has(key));
+        return 1;
+    }
+
+    /**
+     * Clears all shared data.
+     * Use with caution - affects all Eluna states!
+     */
+    int ClearAllSharedData(Eluna* /*E*/)
+    {
+        sElunaSharedData->ClearAll();
+        return 0;
+    }
+
+    /**
+     * Gets waypoint path data by path ID.
+     * Returns a table with all nodes and their properties.
+     *
+     * @param uint32 pathId : the waypoint path ID
+     * @return table path : table with nodes array, or nil if not found
+     */
+    int GetWaypointPath(Eluna* E)
+    {
+        uint32 pathId = E->CHECKVAL<uint32>(1);
+        WaypointPath const* path = sWaypointMgr->GetPath(pathId);
+        
+        if (!path)
+        {
+            E->Push();  // Push nil
+            return 1;
+        }
+        
+        lua_State* L = E->L;
+        lua_newtable(L);  // Create path table
+        
+        // Create nodes array
+        lua_newtable(L);
+        int nodeIndex = 1;
+        for (WaypointNode const& node : path->Nodes)
+        {
+            lua_newtable(L);  // Create node table
+            
+            lua_pushinteger(L, node.Id);
+            lua_setfield(L, -2, "id");
+            
+            lua_pushnumber(L, node.X);
+            lua_setfield(L, -2, "x");
+            
+            lua_pushnumber(L, node.Y);
+            lua_setfield(L, -2, "y");
+            
+            lua_pushnumber(L, node.Z);
+            lua_setfield(L, -2, "z");
+            
+            // Orientation is Optional<float>
+            if (node.Orientation)
+            {
+                lua_pushnumber(L, *node.Orientation);
+                lua_setfield(L, -2, "orientation");
+            }
+            else
+            {
+                lua_pushnumber(L, 0.0);
+                lua_setfield(L, -2, "orientation");
+            }
+            
+            // Delay is Optional<Milliseconds>
+            if (node.Delay)
+            {
+                lua_pushinteger(L, node.Delay->count());
+                lua_setfield(L, -2, "delay");
+            }
+            else
+            {
+                lua_pushinteger(L, 0);
+                lua_setfield(L, -2, "delay");
+            }
+            
+            // MoveType is WaypointMoveType enum
+            lua_pushinteger(L, static_cast<int>(node.MoveType));
+            lua_setfield(L, -2, "moveType");
+            
+            lua_rawseti(L, -2, nodeIndex++);
+        }
+        
+        lua_setfield(L, -2, "nodes");
+        
+        lua_pushinteger(L, path->Id);
+        lua_setfield(L, -2, "id");
+        
+        return 1;
+    }
+
+    /**
+     * Gets the path ID and node ID for a visual waypoint creature GUID.
+     * Used to identify which waypoint a creature marker represents.
+     *
+     * @param uint64 counter : the counter/low part of the creature GUID
+     * @return uint32 pathId : the waypoint path ID (0 if not found)
+     * @return uint32 nodeId : the node ID within the path (0 if not found)
+     */
+    int GetWaypointNodeForVisualGUID(Eluna* E)
+    {
+        uint64 counter = E->CHECKVAL<uint64>(1);
+        // Create a creature GUID using the factory method
+        // We use mapId=0, entry=1 (VISUAL_WAYPOINT), and the counter from the client
+        ObjectGuid guid = ObjectGuid::Create<HighGuid::Creature>(0, 1, counter);
+        
+        uint32 pathId = 0, nodeId = 0;
+        sWaypointMgr->GetPathAndNodeByVisualGUID(guid, pathId, nodeId);
+        
+        E->Push(pathId);
+        E->Push(nodeId);
+        return 2;
+    }
+
+    /**
+     * Highlights a visual waypoint marker by changing its display ID.
+     * Used to visually indicate the selected waypoint in the world.
+     *
+     * @param Player player : the player (used to find the creature in their map)
+     * @param uint32 pathId : the waypoint path ID
+     * @param uint32 nodeId : the node ID within the path
+     * @param uint32 displayId : the display ID to use for highlighting
+     * @return bool success : true if the marker was changed
+     */
+    int HighlightWaypointMarker(Eluna* E)
+    {
+        Player* player = E->CHECKOBJ<Player>(1);
+        uint32 pathId = E->CHECKVAL<uint32>(2);
+        uint32 nodeId = E->CHECKVAL<uint32>(3);
+        uint32 displayId = E->CHECKVAL<uint32>(4);
+        
+        ObjectGuid const& markerGuid = sWaypointMgr->GetVisualGUIDByNode(pathId, nodeId);
+        if (markerGuid.IsEmpty())
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        Creature* marker = ObjectAccessor::GetCreature(*player, markerGuid);
+        if (!marker)
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        // Change display to highlight model and scale up
+        marker->SetDisplayId(displayId);
+        marker->SetObjectScale(3.0f);  // Scale up significantly
+        marker->DestroyForNearbyPlayers();  // Force client update
+        marker->UpdateObjectVisibilityOnCreate();  // Recreate for players
+        
+        E->Push(true);
+        return 1;
+    }
+
+    /**
+     * Resets a visual waypoint marker to its original display.
+     * Used to remove highlighting from a previously selected waypoint.
+     *
+     * @param Player player : the player (used to find the creature in their map)
+     * @param uint32 pathId : the waypoint path ID
+     * @param uint32 nodeId : the node ID within the path
+     * @param uint32 originalDisplayId : the original display ID to restore
+     * @return bool success : true if marker was reset
+     */
+    int ClearWaypointMarkerAuras(Eluna* E)
+    {
+        Player* player = E->CHECKOBJ<Player>(1);
+        uint32 pathId = E->CHECKVAL<uint32>(2);
+        uint32 nodeId = E->CHECKVAL<uint32>(3);
+        uint32 originalDisplayId = E->CHECKVAL<uint32>(4, 0);
+        
+        ObjectGuid const& markerGuid = sWaypointMgr->GetVisualGUIDByNode(pathId, nodeId);
+        if (markerGuid.IsEmpty())
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        Creature* marker = ObjectAccessor::GetCreature(*player, markerGuid);
+        if (!marker)
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        // Reset to original display and scale
+        if (originalDisplayId > 0)
+            marker->SetDisplayId(originalDisplayId);
+        else
+            marker->SetDisplayId(marker->GetNativeDisplayId());
+        marker->SetObjectScale(1.0f);
+        marker->DestroyForNearbyPlayers();  // Force client update
+        marker->UpdateObjectVisibilityOnCreate();  // Recreate for players
+        
+        E->Push(true);
+        return 1;
+    }
+
+    /**
+     * Gets all shared data keys.
+     * Useful for debugging cross-state data.
+     *
+     * @return table keys : array of all key names
+     */
+    int GetSharedDataKeys(Eluna* E)
+    {
+        lua_State* L = E->L;
+        std::vector<std::string> keys = sElunaSharedData->GetKeys();
+        
+        lua_createtable(L, keys.size(), 0);
+        for (size_t i = 0; i < keys.size(); ++i)
+        {
+            lua_pushstring(L, keys[i].c_str());
+            lua_rawseti(L, -2, i + 1);
+        }
+        
+        return 1;
+    }
+
     ElunaRegister<> GlobalMethods[] =
     {
         // Hooks
@@ -3395,7 +3678,21 @@ namespace LuaGlobalFunctions
         { "CreateInt64", &LuaGlobalFunctions::CreateLongLong },
         { "CreateUint64", &LuaGlobalFunctions::CreateULongLong },
         { "StartGameEvent", &LuaGlobalFunctions::StartGameEvent },
-        { "StopGameEvent", &LuaGlobalFunctions::StopGameEvent }
+        { "StopGameEvent", &LuaGlobalFunctions::StopGameEvent },
+
+        // Shared Data (cross-state communication)
+        { "SetSharedData", &LuaGlobalFunctions::SetSharedData },
+        { "GetSharedData", &LuaGlobalFunctions::GetSharedData },
+        { "ClearSharedData", &LuaGlobalFunctions::ClearSharedData },
+        { "HasSharedData", &LuaGlobalFunctions::HasSharedData },
+        { "ClearAllSharedData", &LuaGlobalFunctions::ClearAllSharedData },
+        { "GetSharedDataKeys", &LuaGlobalFunctions::GetSharedDataKeys },
+        
+        // Waypoint utilities
+        { "GetWaypointPath", &LuaGlobalFunctions::GetWaypointPath },
+        { "GetWaypointNodeForVisualGUID", &LuaGlobalFunctions::GetWaypointNodeForVisualGUID },
+        { "HighlightWaypointMarker", &LuaGlobalFunctions::HighlightWaypointMarker },
+        { "ClearWaypointMarkerAuras", &LuaGlobalFunctions::ClearWaypointMarkerAuras }
     };
 }
 #endif

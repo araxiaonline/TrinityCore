@@ -16,6 +16,7 @@
 #include "NPCPackets.h"
 #include "PartyPackets.h"
 #include "Unit.h"
+#include "WaypointManager.h"
 #include <boost/callable_traits/args.hpp>
 
 /***
@@ -3634,14 +3635,18 @@ namespace LuaPlayer
         std::string message = E->CHECKVAL<std::string>(3);
         ChatMsg channel = ChatMsg(E->CHECKVAL<uint8>(4));
         Player* receiver = E->CHECKOBJ<Player>(5);
-        std::string fullmsg = prefix + "\t" + message;
 #if ELUNA_EXPANSION < EXP_RETAIL
+        // For classic/TBC/WotLK: Need to prepend prefix+tab to message
+        std::string fullmsg = prefix + "\t" + message;
         WorldPacket data;
         ChatHandler::BuildChatPacket(data, channel, LANG_ADDON, player, receiver, fullmsg);
         receiver->GetSession()->SendPacket(&data);
 #else
+        // For retail: Pass message and prefix separately
+        // Client automatically strips prefix+tab from LANG_ADDON messages
+        // So we must NOT prepend it or it will be double-stripped
         WorldPackets::Chat::Chat chat;
-        chat.Initialize(channel, LANG_ADDON, player, receiver, fullmsg, 0, "", DEFAULT_LOCALE, prefix);
+        chat.Initialize(channel, LANG_ADDON, player, receiver, message, 0, "", DEFAULT_LOCALE, prefix);
         receiver->GetSession()->SendPacket(chat.Write());
 #endif
         return 0;
@@ -4255,6 +4260,17 @@ namespace LuaPlayer
     }
 #endif
 
+    /**
+     * Clears all waypoint visualizations tracked by the WaypointManager.
+     * This removes stale tracking state and despawns any remaining marker creatures.
+     * Useful for cleaning up after CLEAR_ALL_WAYPOINT_MARKERS or Eluna reload.
+     */
+    int ClearAllWaypointVisualizations(Eluna* /*E*/, Player* player)
+    {
+        sWaypointMgr->ClearAllVisualizations(player);
+        return 0;
+    }
+
     ElunaRegister<Player> PlayerMethods[] =
     {
         // Getters
@@ -4560,7 +4576,10 @@ namespace LuaPlayer
         { "ResetHonor", METHOD_REG_NONE }, // classic only
         { "ClearHonorInfo", METHOD_REG_NONE }, // classic only
         { "GainSpellComboPoints", METHOD_REG_NONE }, // not implemented
-        { "GossipMenuAddItemData", METHOD_REG_NONE } // not implemented
+        { "GossipMenuAddItemData", METHOD_REG_NONE }, // not implemented
+        
+        // Waypoint Visualization
+        { "ClearAllWaypointVisualizations", &LuaPlayer::ClearAllWaypointVisualizations }
     };
 };
 #endif

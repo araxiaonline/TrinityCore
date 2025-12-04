@@ -658,6 +658,10 @@ void Map::UpdatePlayerZoneStats(uint32 oldZone, uint32 newZone)
 
 void Map::Update(uint32 t_diff)
 {
+    ///- Update Eluna for this map (process reload flag, timed events, async queries)
+    if (Eluna* e = GetEluna())
+        e->UpdateEluna(t_diff);
+
     _dynamicTree.update(t_diff);
     /// update worldsessions for existing players
     for (m_mapRefIter = m_mapRefManager.begin(); m_mapRefIter != m_mapRefManager.end(); ++m_mapRefIter)

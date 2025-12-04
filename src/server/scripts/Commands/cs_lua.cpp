@@ -34,6 +34,10 @@ EndScriptData */
 #include "ElunaConfig.h"
 #endif
 
+#if TRINITY_COMPILER == TRINITY_COMPILER_GNU
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 using namespace Trinity::ChatCommands;
 
 class lua_commandscript : public CommandScript

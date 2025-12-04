@@ -7,6 +7,10 @@
 #ifndef CREATUREMETHODS_H
 #define CREATUREMETHODS_H
 
+// Araxia Online - Custom write operations
+#include "AraxiaCreatureWriter.h"
+#include "ElunaSharedData.h"
+
 /***
  * Non-[Player] controlled [Unit]s (i.e. NPCs).
  *
@@ -1468,6 +1472,532 @@ namespace LuaCreature
         return 0;
     }
 
+    // ============================================================================
+    // Araxia Custom Methods - Phase 2
+    // Safe accessors for combat stats and template data
+    // ============================================================================
+
+    /**
+     * Returns the [Creature]'s armor value.
+     * This is a safe accessor that won't crash on null data.
+     *
+     * @return uint32 armor : the armor value
+     */
+    int GetArmor(Eluna* E, Creature* creature)
+    {
+        E->Push(creature->GetArmor());
+        return 1;
+    }
+
+    /**
+     * Returns the [Creature]'s resistance for a specific spell school.
+     * Schools: 0=Physical, 1=Holy, 2=Fire, 3=Nature, 4=Frost, 5=Shadow, 6=Arcane
+     *
+     * @param uint32 school : the spell school (0-6)
+     * @return int32 resistance : the resistance value
+     */
+    int GetResistance(Eluna* E, Creature* creature)
+    {
+        uint32 school = E->CHECKVAL<uint32>(2);
+        if (school >= MAX_SPELL_SCHOOL)
+        {
+            E->Push(0);
+            return 1;
+        }
+        E->Push(creature->GetResistance(SpellSchools(school)));
+        return 1;
+    }
+
+    /**
+     * Returns the [Creature]'s base attack time for a weapon type.
+     * Types: 0=BASE_ATTACK, 1=OFF_ATTACK, 2=RANGED_ATTACK
+     *
+     * @param uint32 attackType : the weapon attack type (0-2), defaults to 0
+     * @return uint32 attackTime : the base attack time in milliseconds
+     */
+    int GetBaseAttackTime(Eluna* E, Creature* creature)
+    {
+        uint32 attackType = E->CHECKVAL<uint32>(2, 0);
+        if (attackType >= MAX_ATTACK)
+        {
+            E->Push(0);
+            return 1;
+        }
+        E->Push(creature->GetBaseAttackTime(WeaponAttackType(attackType)));
+        return 1;
+    }
+
+    /**
+     * Returns the [Creature]'s stat value.
+     * Stats: 0=Strength, 1=Agility, 2=Stamina, 3=Intellect, 4=Spirit
+     * This is a safe accessor with bounds checking.
+     *
+     * @param uint32 stat : the stat type (0-4)
+     * @return float statValue : the stat value
+     */
+    int GetStat(Eluna* E, Creature* creature)
+    {
+        uint32 stat = E->CHECKVAL<uint32>(2);
+        if (stat >= MAX_STATS)
+        {
+            E->Push(0.0f);
+            return 1;
+        }
+        E->Push(creature->GetStat(Stats(stat)));
+        return 1;
+    }
+
+    /**
+     * Visualizes the [Creature]'s waypoint path by spawning marker creatures at each node.
+     * By default only visible to GMs. Pass a [Player] to inherit their phase and make markers visible to them.
+     * Call DevisualizeWaypointPath() to remove.
+     *
+     * @param [Player] phaseSource = nil : optional player whose phase the markers will inherit (makes them visible to that player)
+     * @param uint32 displayId = nil : optional display ID for the markers
+     * @return bool success : true if visualization was created
+     */
+    int VisualizeWaypointPath(Eluna* E, Creature* creature)
+    {
+        uint32 pathId = creature->GetWaypointPathId();
+        if (pathId == 0)
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        WaypointPath const* path = sWaypointMgr->GetPath(pathId);
+        if (!path || path->Nodes.empty())
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        // Optional player parameter for phase inheritance (arg 2)
+        Player* phaseSource = E->CHECKOBJ<Player>(2, false);
+        
+        // Display ID is always arg 3 when player is provided
+        Optional<uint32> displayId;
+        if (!lua_isnoneornil(E->L, 3))
+        {
+            displayId = E->CHECKVAL<uint32>(3);
+        }
+        else if (!phaseSource && !lua_isnoneornil(E->L, 2) && lua_isnumber(E->L, 2))
+        {
+            // If no player but arg 2 is a number, use it as displayId
+            displayId = E->CHECKVAL<uint32>(2);
+        }
+        
+        sWaypointMgr->VisualizePath(creature, path, displayId);
+        
+        // If a player was provided, inherit their phase for all markers
+        if (phaseSource)
+        {
+            for (WaypointNode const& node : path->Nodes)
+            {
+                ObjectGuid const& markerGuid = sWaypointMgr->GetVisualGUIDByNode(path->Id, node.Id);
+                if (!markerGuid.IsEmpty())
+                {
+                    if (Creature* marker = ObjectAccessor::GetCreature(*creature, markerGuid))
+                    {
+                        PhasingHandler::InheritPhaseShift(marker, phaseSource);
+                    }
+                }
+            }
+        }
+        
+        E->Push(true);
+        return 1;
+    }
+    
+    /**
+     * Removes waypoint visualization markers for the [Creature]'s path.
+     *
+     * @return bool success : true if devisualization was performed
+     */
+    int DevisualizeWaypointPath(Eluna* E, Creature* creature)
+    {
+        uint32 pathId = creature->GetWaypointPathId();
+        if (pathId == 0)
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        WaypointPath const* path = sWaypointMgr->GetPath(pathId);
+        if (!path)
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        sWaypointMgr->DevisualizePath(creature, path);
+        E->Push(true);
+        return 1;
+    }
+
+    /**
+     * Shows a visual marker at the [Creature]'s spawn/home position.
+     * The marker is a creature with the specified display ID (default: spawn point marker).
+     *
+     * @param [Player] phaseSource = nil : optional player to inherit phase from
+     * @param uint32 displayId = 31366 : display ID for the marker (default is green circle)
+     * @return Creature marker : the spawned marker creature, or nil on failure
+     */
+    int ShowSpawnPointMarker(Eluna* E, Creature* creature)
+    {
+        float x, y, z, o;
+        creature->GetHomePosition(x, y, z, o);
+        
+        // Optional player parameter for phase inheritance (arg 2)
+        Player* phaseSource = E->CHECKOBJ<Player>(2, false);
+        
+        // Display ID - default to green circle (31366) or specified
+        uint32 displayId = 31366;  // Green targeting circle
+        int displayIdArg = phaseSource ? 3 : 2;
+        if (!lua_isnoneornil(E->L, displayIdArg))
+        {
+            displayId = E->CHECKVAL<uint32>(displayIdArg);
+        }
+        
+        // First, hide any existing spawn marker for this creature
+        ObjectGuid::LowType spawnId = creature->GetSpawnId();
+        std::string markerKey = "spawn_marker_" + std::to_string(spawnId);
+        std::string existingCounter;
+        if (sElunaSharedData->Get(markerKey, existingCounter))
+        {
+            try {
+                ObjectGuid::LowType counter = std::stoull(existingCounter);
+                ObjectGuid oldGuid = ObjectGuid::Create<HighGuid::Creature>(creature->GetMapId(), VISUAL_WAYPOINT, counter);
+                if (Creature* oldMarker = ObjectAccessor::GetCreature(*creature, oldGuid))
+                {
+                    oldMarker->DespawnOrUnsummon();
+                }
+            } catch (...) {
+                // Ignore invalid stored GUID
+            }
+            sElunaSharedData->Clear(markerKey);
+        }
+        
+        // Use SummonCreature like waypoint visualization does (VISUAL_WAYPOINT = 1)
+        TempSummon* marker = creature->SummonCreature(VISUAL_WAYPOINT, x, y, z, o);
+        if (!marker)
+        {
+            E->Push();
+            return 1;
+        }
+        
+        // Set custom display
+        marker->SetDisplayId(displayId, true);
+        marker->SetObjectScale(1.5f);  // Make it visible
+        
+        // Inherit phase from player if provided
+        if (phaseSource)
+        {
+            PhasingHandler::InheritPhaseShift(marker, phaseSource);
+        }
+        
+        // Store marker's counter for later removal
+        sElunaSharedData->Set(markerKey, std::to_string(marker->GetGUID().GetCounter()));
+        
+        E->Push(marker);
+        return 1;
+    }
+
+    /**
+     * Hides/removes the spawn point marker for this [Creature].
+     *
+     * @return bool success : true if marker was removed
+     */
+    int HideSpawnPointMarker(Eluna* E, Creature* creature)
+    {
+        ObjectGuid::LowType spawnId = creature->GetSpawnId();
+        std::string markerKey = "spawn_marker_" + std::to_string(spawnId);
+        std::string counterStr;
+        
+        if (!sElunaSharedData->Get(markerKey, counterStr))
+        {
+            E->Push(false);
+            return 1;
+        }
+        
+        try {
+            ObjectGuid::LowType counter = std::stoull(counterStr);
+            ObjectGuid markerGuid = ObjectGuid::Create<HighGuid::Creature>(creature->GetMapId(), VISUAL_WAYPOINT, counter);
+            
+            if (Creature* marker = ObjectAccessor::GetCreature(*creature, markerGuid))
+            {
+                marker->DespawnOrUnsummon();
+            }
+        } catch (...) {
+            // Ignore invalid stored GUID
+        }
+        
+        sElunaSharedData->Clear(markerKey);
+        E->Push(true);
+        return 1;
+    }
+
+    /**
+     * Returns a table containing the [Creature]'s waypoint path data.
+     * Includes path info and all waypoint nodes.
+     *
+     * @return table waypointData : table with path info and nodes, or nil if no path
+     */
+    int GetWaypointPathData(Eluna* E, Creature* creature)
+    {
+        uint32 pathId = creature->GetWaypointPathId();
+        if (pathId == 0)
+        {
+            E->Push();  // Push nil
+            return 1;
+        }
+        
+        WaypointPath const* path = sWaypointMgr->GetPath(pathId);
+        if (!path || path->Nodes.empty())
+        {
+            E->Push();  // Push nil
+            return 1;
+        }
+        
+        lua_State* L = E->L;
+        lua_newtable(L);
+        
+        // Path info
+        lua_pushstring(L, "pathId");
+        lua_pushnumber(L, path->Id);
+        lua_settable(L, -3);
+        
+        lua_pushstring(L, "nodeCount");
+        lua_pushnumber(L, path->Nodes.size());
+        lua_settable(L, -3);
+        
+        lua_pushstring(L, "moveType");
+        lua_pushnumber(L, static_cast<uint8>(path->MoveType));
+        lua_settable(L, -3);
+        
+        // Current waypoint info
+        auto [currentNodeId, currentPathId] = creature->GetCurrentWaypointInfo();
+        lua_pushstring(L, "currentNodeId");
+        lua_pushnumber(L, currentNodeId);
+        lua_settable(L, -3);
+        
+        // Nodes array
+        lua_pushstring(L, "nodes");
+        lua_newtable(L);
+        
+        int nodeIndex = 1;
+        for (WaypointNode const& node : path->Nodes)
+        {
+            lua_pushnumber(L, nodeIndex++);
+            lua_newtable(L);
+            
+            lua_pushstring(L, "id");
+            lua_pushnumber(L, node.Id);
+            lua_settable(L, -3);
+            
+            lua_pushstring(L, "x");
+            lua_pushnumber(L, node.X);
+            lua_settable(L, -3);
+            
+            lua_pushstring(L, "y");
+            lua_pushnumber(L, node.Y);
+            lua_settable(L, -3);
+            
+            lua_pushstring(L, "z");
+            lua_pushnumber(L, node.Z);
+            lua_settable(L, -3);
+            
+            if (node.Delay)
+            {
+                lua_pushstring(L, "delay");
+                lua_pushnumber(L, node.Delay->count());
+                lua_settable(L, -3);
+            }
+            
+            lua_settable(L, -3);  // Add node to nodes table
+        }
+        lua_settable(L, -3);  // Add nodes table to main table
+        
+        return 1;
+    }
+
+    /**
+     * Returns a table containing the [Creature]'s template data.
+     * This provides access to all creature_template fields.
+     *
+     * @return table templateData : table with template fields
+     */
+    int GetCreatureTemplateData(Eluna* E, Creature* creature)
+    {
+        CreatureTemplate const* cTemplate = creature->GetCreatureTemplate();
+        if (!cTemplate)
+        {
+            E->Push();  // Push nil
+            return 1;
+        }
+
+        lua_State* L = E->L;
+        lua_newtable(L);
+
+        // Helper macro to set table fields
+        #define SET_NUMBER(key, value) \
+            lua_pushstring(L, key); \
+            lua_pushnumber(L, static_cast<lua_Number>(value)); \
+            lua_settable(L, -3)
+
+        #define SET_STRING(key, value) \
+            lua_pushstring(L, key); \
+            lua_pushstring(L, value.c_str()); \
+            lua_settable(L, -3)
+
+        #define SET_BOOL(key, value) \
+            lua_pushstring(L, key); \
+            lua_pushboolean(L, value ? 1 : 0); \
+            lua_settable(L, -3)
+
+        // Basic info
+        SET_NUMBER("entry", cTemplate->Entry);
+        SET_STRING("name", cTemplate->Name);
+        SET_STRING("subName", cTemplate->SubName);
+        SET_STRING("iconName", cTemplate->IconName);
+        
+        // Flags
+        SET_NUMBER("npcFlags", cTemplate->npcflag);
+        SET_NUMBER("unitFlags", cTemplate->unit_flags);
+        SET_NUMBER("unitFlags2", cTemplate->unit_flags2);
+        SET_NUMBER("unitFlags3", cTemplate->unit_flags3);
+        SET_NUMBER("extraFlags", cTemplate->flags_extra);
+        
+        // Type info
+        SET_NUMBER("type", cTemplate->type);
+        SET_NUMBER("family", static_cast<uint32>(cTemplate->family));
+        SET_NUMBER("unitClass", cTemplate->unit_class);
+        SET_NUMBER("faction", cTemplate->faction);
+        
+        // Combat
+        SET_NUMBER("baseAttackTime", cTemplate->BaseAttackTime);
+        SET_NUMBER("rangeAttackTime", cTemplate->RangeAttackTime);
+        SET_NUMBER("baseVariance", cTemplate->BaseVariance);
+        SET_NUMBER("rangeVariance", cTemplate->RangeVariance);
+        SET_NUMBER("dmgSchool", cTemplate->dmgschool);
+        
+        // Movement
+        SET_NUMBER("speedWalk", cTemplate->speed_walk);
+        SET_NUMBER("speedRun", cTemplate->speed_run);
+        SET_NUMBER("scale", cTemplate->scale);
+        SET_NUMBER("movementType", cTemplate->MovementType);
+        
+        // AI
+        SET_STRING("aiName", cTemplate->AIName);
+        SET_NUMBER("scriptId", cTemplate->ScriptID);
+        
+        // Misc
+        SET_NUMBER("vehicleId", cTemplate->VehicleId);
+        SET_BOOL("regenHealth", cTemplate->RegenHealth);
+        SET_BOOL("racialLeader", cTemplate->RacialLeader);
+        SET_NUMBER("modExperience", cTemplate->ModExperience);
+        SET_NUMBER("requiredExpansion", cTemplate->RequiredExpansion);
+
+        #undef SET_NUMBER
+        #undef SET_STRING
+        #undef SET_BOOL
+        
+        // Base resistances from template
+        lua_pushstring(L, "resistances");
+        lua_newtable(L);
+        for (int i = 0; i < MAX_SPELL_SCHOOL; ++i)
+        {
+            lua_pushinteger(L, i);
+            lua_pushinteger(L, cTemplate->resistance[i]);
+            lua_settable(L, -3);
+        }
+        lua_settable(L, -3);
+        
+        // Spells
+        lua_pushstring(L, "spells");
+        lua_newtable(L);
+        for (uint32 i = 0; i < MAX_CREATURE_SPELLS; ++i)
+        {
+            if (cTemplate->spells[i] != 0)
+            {
+                lua_pushinteger(L, i + 1);
+                lua_pushinteger(L, cTemplate->spells[i]);
+                lua_settable(L, -3);
+            }
+        }
+        lua_settable(L, -3);
+
+        return 1;
+    }
+
+    // ========================================================================
+    // Araxia Online - Database Write Operations
+    // These methods persist changes to the database using AraxiaCreatureWriter
+    // ========================================================================
+
+    /**
+     * [Araxia] Saves the wander distance to the database for this creature spawn.
+     * This persists the change across server restarts.
+     * Only applies to creatures with MovementType = 1 (Random).
+     *
+     * @param float distance : the wander radius in yards (0-100)
+     * @param [Player] changedBy : optional player who made the change (for logging)
+     * @return bool success : true if the change was saved
+     * @return string message : result message
+     */
+    int SaveWanderDistance(Eluna* E, Creature* creature)
+    {
+        float distance = E->CHECKVAL<float>(2);
+        Player* changedBy = E->CHECKOBJ<Player>(3, false);
+        
+        ObjectGuid::LowType spawnId = creature->GetSpawnId();
+        if (spawnId == 0)
+        {
+            E->Push(false);
+            E->Push("Creature has no spawn ID (not a database spawn)");
+            return 2;
+        }
+        
+        Araxia::WriteResult result = sAraxiaCreatureWriter.SetWanderDistance(spawnId, distance, changedBy);
+        
+        // Also update the live creature's in-memory value
+        if (result.success)
+            creature->SetWanderDistance(distance);
+        
+        E->Push(result.success);
+        E->Push(result.message);
+        return 2;
+    }
+
+    /**
+     * [Araxia] Saves the movement type to the database for this creature spawn.
+     * This persists the change across server restarts.
+     *
+     * @param uint8 movementType : 0=Idle, 1=Random, 2=Waypoint
+     * @param [Player] changedBy : optional player who made the change (for logging)
+     * @return bool success : true if the change was saved
+     * @return string message : result message
+     */
+    int SaveMovementType(Eluna* E, Creature* creature)
+    {
+        uint8 movementType = E->CHECKVAL<uint8>(2);
+        Player* changedBy = E->CHECKOBJ<Player>(3, false);
+        
+        ObjectGuid::LowType spawnId = creature->GetSpawnId();
+        if (spawnId == 0)
+        {
+            E->Push(false);
+            E->Push("Creature has no spawn ID (not a database spawn)");
+            return 2;
+        }
+        
+        Araxia::WriteResult result = sAraxiaCreatureWriter.SetMovementType(spawnId, movementType, changedBy);
+        
+        E->Push(result.success);
+        E->Push(result.message);
+        return 2;
+    }
+
     ElunaRegister<Creature> CreatureMethods[] =
     {
         // Getters
@@ -1503,6 +2033,18 @@ namespace LuaCreature
         { "GetLootRecipientGroup", METHOD_REG_NONE },
         { "GetShieldBlockValue", METHOD_REG_NONE },
 #endif
+
+        // Araxia Custom Methods - Phase 2
+        { "GetArmor", &LuaCreature::GetArmor },
+        { "GetResistance", &LuaCreature::GetResistance },
+        { "GetBaseAttackTime", &LuaCreature::GetBaseAttackTime },
+        { "GetStat", &LuaCreature::GetStat },
+        { "GetCreatureTemplateData", &LuaCreature::GetCreatureTemplateData },
+        { "GetWaypointPathData", &LuaCreature::GetWaypointPathData },
+        { "VisualizeWaypointPath", &LuaCreature::VisualizeWaypointPath },
+        { "DevisualizeWaypointPath", &LuaCreature::DevisualizeWaypointPath },
+        { "ShowSpawnPointMarker", &LuaCreature::ShowSpawnPointMarker },
+        { "HideSpawnPointMarker", &LuaCreature::HideSpawnPointMarker },
 
         // Setters
         { "SetRegeneratingHealth", &LuaCreature::SetRegeneratingHealth },
@@ -1578,7 +2120,11 @@ namespace LuaCreature
         { "ResetAllThreat", &LuaCreature::ResetAllThreat },
         { "FixateTarget", &LuaCreature::FixateTarget },
         { "ClearFixate", &LuaCreature::ClearFixate },
-        { "RemoveFromWorld", &LuaCreature::RemoveFromWorld }
+        { "RemoveFromWorld", &LuaCreature::RemoveFromWorld },
+
+        // Araxia Online - Database Write Operations
+        { "SaveWanderDistance", &LuaCreature::SaveWanderDistance },
+        { "SaveMovementType", &LuaCreature::SaveMovementType }
     };
 };
 #endif

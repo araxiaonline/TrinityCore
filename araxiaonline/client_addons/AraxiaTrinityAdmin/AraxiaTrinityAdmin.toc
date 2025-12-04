@@ -1,0 +1,15 @@
+## Interface: 110205
+## Title: Araxia Trinity Admin
+## Notes: Admin tools for TrinityCore content creation
+## Author: Araxia Development Team
+## Version: 1.0.0
+## SavedVariables: AraxiaTrinityAdminDB
+## Dependencies: AMS_Client
+
+Core.lua
+ServerDataModule.lua
+AMSTestClient.lua
+UI/MainWindow.lua
+UI/MinimapButton.lua
+UI/Panels/NPCInfoPanel.lua
+UI/Panels/AddNPCPanel.lua

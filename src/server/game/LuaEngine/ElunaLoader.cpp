@@ -359,6 +359,11 @@ void ElunaLoader::ReloadElunaForMap(int mapId)
     // reload the script cache asynchronously
     ReloadScriptCache();
 
+    // Wait for the reload thread to finish before reloading Eluna instances
+    // This prevents a race condition where Eluna reloads with old cached bytecode
+    if (m_reloadThread.joinable())
+        m_reloadThread.join();
+
     // If a mapid is provided but does not match any map or reserved id then only script storage is loaded
     if (mapId != RELOAD_CACHE_ONLY)
     {

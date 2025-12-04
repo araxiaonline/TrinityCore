@@ -1,0 +1,82 @@
+# Scarlet Champion - Elite Guard for Scarlet Monastery
+# Schema: araxia-content/v1
+# Author: Araxia Team
+
+_schema: araxia-content/v1
+_type: creature_template
+
+creature_template:
+  # === IDENTITY ===
+  entry: 100001
+  name: "Scarlet Champion"
+  subname: "Crusade Elite"
+  
+  # === LEVEL & STATS ===
+  level:
+    min: 30
+    max: 32
+  health:
+    base: 5000
+    modifier: 1.2
+  mana:
+    base: 0
+  
+  # === CLASSIFICATION ===
+  type: humanoid
+  rank: elite
+  
+  # === FACTION ===
+  faction: scarlet_crusade
+  
+  # === APPEARANCE ===
+  model:
+    display_id: 3241
+    scale: 1.0
+  
+  # === COMBAT ===
+  combat:
+    damage:
+      min: 80
+      max: 120
+    armor: 1500
+    attack_speed:
+      base: 2000
+    damage_school: physical
+  
+  # === AI & BEHAVIOR ===
+  ai:
+    script: scarlet_melee_ai
+    aggro_range: 20
+    leash_range: 40
+  
+  # === ABILITIES ===
+  abilities:
+    - spell: crusader_strike
+      cooldown: 8s
+      priority: 1
+      
+    - spell: battle_shout
+      cooldown: 30s
+      trigger:
+        type: on_aggro
+      
+    - spell: divine_shield
+      cooldown: 60s
+      trigger:
+        type: health_below
+        value: 20%
+  
+  # === LOOT ===
+  loot:
+    table: scarlet_elite_loot
+    gold:
+      min: 50
+      max: 100
+  
+  # === METADATA ===
+  _meta:
+    author: "Araxia Team"
+    version: "1.0.0"
+    created: "2025-12-01"
+    tags: [scarlet, crusade, dungeon, elite]
+    notes: "Elite guard for Scarlet Monastery Cathedral entrance"
