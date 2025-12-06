@@ -484,7 +484,8 @@ public:
 
         // Get object pointer (and check type, no error)
         ElunaObject* obj = E->CHECKOBJ<ElunaObject>(1, false);
-        obj->~ElunaObject();
+        if (obj)
+            obj->~ElunaObject();
         return 0;
     }
 
