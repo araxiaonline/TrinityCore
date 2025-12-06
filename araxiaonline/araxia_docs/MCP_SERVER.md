@@ -455,3 +455,17 @@ src/araxiaonline/mcp/
 - 43,316 spawn points across 10 Pandaria zones
 - YAML → SQL converter working
 - Database backup/restore workflow established
+
+### Zone ID Fix (Dec 6, 2025 - Later)
+- **Issue Found:** 93% of spawns had zoneId=0 after import
+- **Root Cause:** `yaml_to_sql.py` didn't include zoneId/areaId columns
+- **Fix Applied:**
+  - Updated `yaml_to_sql.py` to include zoneId/areaId
+  - Added zone_id/area_id to 3,965 YAML files
+  - Updated 43,316 database rows via MCP
+- **Test Suite:** 44 tests, all passing
+- **Scripts Created:**
+  - `validate_import.py` - Pre-import validation
+  - `validate_spawns.py` - Post-import database validation
+  - `fix_spawn_zone_ids.py` - Add zone_id to YAML files
+  - `update_zone_ids_via_mcp.py` - Update database via MCP
