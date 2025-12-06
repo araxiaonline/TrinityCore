@@ -111,8 +111,19 @@ Araxia.MCP.AllowRemote = 0
 |------|-------------|
 | `server_info` | Get server status, uptime, player count |
 | `player_list` | List all online players |
-| `gm_command` | Execute GM commands |
+| `gm_command` | Execute GM commands (requires player) |
 | `reload_scripts` | Reload Eluna scripts |
+
+### Spawn Tools (Headless - No Player Required)
+
+| Tool | Description |
+|------|-------------|
+| `spawn_query` | Query creatures spawned on a map (filter by entry/area) |
+| `spawn_count` | Get creature counts on a map |
+| `spawn_creature` | Force spawn a creature at a location |
+| `reload_creatures` | Reload creature templates from database |
+| `console_command` | Execute server console commands |
+| `map_info` | Get map information and creature counts |
 
 ## Usage Examples
 
@@ -409,3 +420,38 @@ src/araxiaonline/mcp/
 ├── WorldScan.cpp     # Added GetGroundHeightAt()
 └── ServerTools.cpp   # Implemented gm_command
 ```
+
+## Session Summary (Dec 6, 2025)
+
+### Headless Spawn Management Tools 🚀
+
+Added new MCP tools that work **without a player in-game**:
+
+| Tool | Purpose |
+|------|---------|
+| `spawn_query` | Query creatures on a map (filter by entry/area/radius) |
+| `spawn_count` | Get creature counts on a map |
+| `spawn_creature` | Force spawn a creature at coordinates |
+| `reload_creatures` | Reload creature templates from DB |
+| `console_command` | Execute server console commands |
+| `map_info` | Get map info and creature counts |
+
+### Why This Matters
+
+Previously, MCP tools like `gm_command` required a player to be logged in. Now the AI can:
+- **Validate spawn data** after database imports
+- **Test creature spawns** without logging in
+- **Query map state** programmatically
+- **Reload creature data** without server restart
+
+### Files Added
+```
+src/araxiaonline/mcp/
+└── SpawnTools.cpp    # New headless spawn management tools
+```
+
+### MoPDB Integration Complete
+- 3,965 creature templates imported
+- 43,316 spawn points across 10 Pandaria zones
+- YAML → SQL converter working
+- Database backup/restore workflow established
