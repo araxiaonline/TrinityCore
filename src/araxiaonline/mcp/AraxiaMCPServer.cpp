@@ -27,7 +27,16 @@ MCPServer::MCPServer() : _impl(std::make_unique<Impl>())
 
 MCPServer::~MCPServer()
 {
-    Shutdown();
+    // Note: During static destruction, other singletons may already be destroyed.
+    // We need to be careful not to access them.
+    try
+    {
+        Shutdown();
+    }
+    catch (...)
+    {
+        // Swallow any exceptions during destruction
+    }
 }
 
 MCPServer* MCPServer::Instance()
@@ -117,22 +126,29 @@ bool MCPServer::Initialize()
 
 void MCPServer::Shutdown()
 {
-    if (!_running && !_serverThread)
+    // Only shutdown if we actually started
+    if (!_serverThread && !_running)
         return;
     
-    TC_LOG_INFO("araxia.mcp", "[MCP] Shutting down Araxia MCP Server...");
+    // Prevent double shutdown
+    if (_shutdownRequested.exchange(true))
+        return;
     
-    _shutdownRequested = true;
-    _impl->server.stop();
+    // Stop the HTTP server first (this will cause listen() to return)
+    // httplib::Server::stop() is thread-safe
+    if (_impl)
+        _impl->server.stop();
     
-    if (_serverThread && _serverThread->joinable())
-        _serverThread->join();
+    // Wait for server thread to finish
+    if (_serverThread)
+    {
+        if (_serverThread->joinable())
+            _serverThread->join();
+        _serverThread.reset();
+    }
     
-    _serverThread.reset();
     _running = false;
-    _shutdownRequested = false;
-    
-    TC_LOG_INFO("araxia.mcp", "[MCP] Araxia MCP Server stopped");
+    // Note: Don't reset _shutdownRequested - keep it true to prevent re-init during destruction
 }
 
 void MCPServer::ServerThread()
