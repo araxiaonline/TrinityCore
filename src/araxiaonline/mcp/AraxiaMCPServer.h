@@ -106,6 +106,7 @@ void RegisterServerTools();
 void RegisterElunaTools();
 void RegisterWorldTools();
 void RegisterWorldScanTools();  // LIDAR-style spatial awareness
+void RegisterSpawnTools();      // Headless spawn management (no player required)
 
 } // namespace Araxia
 

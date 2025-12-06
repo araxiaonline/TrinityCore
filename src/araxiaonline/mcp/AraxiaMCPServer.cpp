@@ -61,6 +61,7 @@ bool MCPServer::Initialize()
     RegisterServerTools();
     RegisterDatabaseTools();
     RegisterWorldScanTools();  // LIDAR-style spatial awareness
+    RegisterSpawnTools();      // Headless spawn management
     // RegisterElunaTools();  // Phase 3
     // RegisterWorldTools();  // Phase 4
     
