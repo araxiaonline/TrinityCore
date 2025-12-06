@@ -24,33 +24,19 @@
 #include "Log.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"
-#include "DBCStores.h"
+#include "DB2Stores.h"
 #include <sstream>
 
 namespace Araxia
 {
 
-// Helper: Get a map instance (creates if needed for continent maps)
+// Helper: Get a map instance
 static Map* GetOrCreateMap(uint32 mapId)
 {
-    // For continent maps (0, 1, 530, 571, 870, etc.), get the base map
-    MapEntry const* mapEntry = sMapStore.LookupEntry(mapId);
-    if (!mapEntry)
-        return nullptr;
-    
-    // Continent maps are always loaded
-    return sMapMgr->FindBaseNonInstanceMap(mapId);
+    // For continent maps, use instanceId 0
+    return sMapMgr->FindMap(mapId, 0);
 }
 
-// Helper: Count creatures on a map by entry
-static uint32 CountCreaturesByEntry(Map* map, uint32 entry)
-{
-    uint32 count = 0;
-    
-    // This is a simplified count - in production you'd iterate the map's creature store
-    // For now, we'll query the database for spawned creatures
-    return count;
-}
 
 void RegisterSpawnTools()
 {
@@ -263,7 +249,7 @@ void RegisterSpawnTools()
             float y = params.value("y", 0.0f);
             float z = params.value("z", 0.0f);
             float o = params.value("orientation", 0.0f);
-            bool save = params.value("save", false);
+            // Note: save parameter ignored - spawns are always temporary for now
             
             // Validate creature template exists
             CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(entry);
@@ -292,7 +278,8 @@ void RegisterSpawnTools()
             // Create the creature
             Creature* creature = new Creature();
             
-            if (!creature->Create(map->GenerateLowGuid<HighGuid::Creature>(), map, entry, {x, y, z, o}))
+            // Create(guidlow, map, entry, pos, data, vehId, dynamic)
+            if (!creature->Create(map->GenerateLowGuid<HighGuid::Creature>(), map, entry, {x, y, z, o}, nullptr, 0, false))
             {
                 delete creature;
                 return {
@@ -302,12 +289,7 @@ void RegisterSpawnTools()
                 };
             }
             
-            // Add to map
-            creature->SaveToDB(map->GetId(), 1 << map->GetSpawnMode());
-            
-            ObjectGuid::LowType spawnId = creature->GetSpawnId();
-            
-            // Actually add to the world
+            // Add to the world
             if (!map->AddToMap(creature))
             {
                 delete creature;
@@ -317,6 +299,11 @@ void RegisterSpawnTools()
                     {"entry", entry}
                 };
             }
+            
+            ObjectGuid::LowType spawnId = creature->GetSpawnId();
+            
+            // Note: SaveToDB is complex in TC 11.x, skip for now (temporary spawns only)
+            // For persistent spawns, use db_execute to insert into creature table
             
             return {
                 {"success", true},
@@ -330,7 +317,8 @@ void RegisterSpawnTools()
                     {"o", o},
                     {"map", mapId}
                 }},
-                {"saved", save}
+                {"temporary", true},
+                {"note", "Creature is temporary. Use db_execute to persist to database."}
             };
         }
     );
@@ -358,24 +346,17 @@ void RegisterSpawnTools()
             
             TC_LOG_INFO("araxia.mcp", "[MCP] Reloading creatures (entry: %u, map: %u)", entry, mapId);
             
-            // Reload creature templates if entry specified
-            if (entry != 0)
-            {
-                sObjectMgr->LoadCreatureTemplate(entry);
-                
-                return {
-                    {"success", true},
-                    {"message", "Creature template reloaded"},
-                    {"entry", entry}
-                };
-            }
+            // TC 11.x doesn't support single-entry reload via API
+            // Reload all creature templates
+            (void)entry;  // Suppress unused warning
+            (void)mapId;
             
-            // Full reload - this is expensive!
-            // In production, you'd want to be more selective
+            sObjectMgr->LoadCreatureTemplates();
+            
             return {
                 {"success", true},
-                {"message", "Full creature reload requested. This may take time."},
-                {"note", "For safety, full reload should be done via server restart or .reload creature command"}
+                {"message", "All creature templates reloaded from database"},
+                {"note", "Spawns require server restart to update"}
             };
         }
     );
@@ -441,29 +422,13 @@ void RegisterSpawnTools()
                 
                 if (what == "creature")
                 {
-                    uint32 entry = 0;
-                    iss >> entry;
-                    
-                    if (entry != 0)
-                    {
-                        sObjectMgr->LoadCreatureTemplate(entry);
-                        return {
-                            {"success", true},
-                            {"command", "reload creature"},
-                            {"entry", entry},
-                            {"message", "Creature template reloaded"}
-                        };
-                    }
-                    else
-                    {
-                        // Reload all creature templates
-                        sObjectMgr->LoadCreatureTemplates();
-                        return {
-                            {"success", true},
-                            {"command", "reload creature"},
-                            {"message", "All creature templates reloaded"}
-                        };
-                    }
+                    // Reload all creature templates
+                    sObjectMgr->LoadCreatureTemplates();
+                    return {
+                        {"success", true},
+                        {"command", "reload creature"},
+                        {"message", "All creature templates reloaded from database"}
+                    };
                 }
                 else if (what == "creature_spawns" || what == "spawns")
                 {
@@ -521,7 +486,7 @@ void RegisterSpawnTools()
             json result = {
                 {"success", true},
                 {"mapId", mapId},
-                {"name", mapEntry->MapName[0]},  // English name
+                {"name", mapEntry->MapName[LOCALE_enUS]},  // English name
                 {"isLoaded", map != nullptr},
                 {"type", mapEntry->InstanceType}
             };
