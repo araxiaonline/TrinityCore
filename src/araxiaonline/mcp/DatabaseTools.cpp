@@ -202,6 +202,8 @@ void RegisterDatabaseTools()
             
             try
             {
+                // DirectExecute doesn't return errors - they go to DBErrors.log
+                // We use DirectExecute for DML as Query() may not work for all DML
                 if (database == "world")
                     WorldDatabase.DirectExecute(query.c_str());
                 else if (database == "characters")
@@ -211,12 +213,17 @@ void RegisterDatabaseTools()
                 else
                     return {{"success", false}, {"error", "Unknown database: " + database}};
                 
+                // Note: TC's database layer logs errors to DBErrors.log but doesn't expose them
+                // to the caller. The query may have failed silently.
+                // Callers should check DBErrors.log after batch operations.
+                
                 return {
                     {"success", true},
                     {"database", database},
                     {"query", query},
                     {"reason", reason},
-                    {"message", "Query executed successfully"}
+                    {"message", "Query submitted"},
+                    {"warning", "Check DBErrors.log - TC does not expose MySQL errors to callers"}
                 };
             }
             catch (const std::exception& e)
