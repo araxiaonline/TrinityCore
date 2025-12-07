@@ -92,6 +92,7 @@ private:
 
 public:
     static ElunaMgr* instance();
+    static bool IsShuttingDown() { return _shuttingDown; }
 
     void Create(Map* map, ElunaInfo const& info);
 
@@ -103,6 +104,7 @@ public:
 
 private:
     std::unordered_map<ElunaInfoKey, std::unique_ptr<Eluna>> _elunaMap;
+    static bool _shuttingDown;
 };
 
 #define sElunaMgr ElunaMgr::instance()

@@ -7,6 +7,8 @@
 #include "ElunaMgr.h"
 #include "LuaEngine.h"
 
+bool ElunaMgr::_shuttingDown = false;
+
 ElunaMgr::ElunaMgr()
 {
 }
@@ -19,6 +21,7 @@ ElunaMgr* ElunaMgr::instance()
 
 ElunaMgr::~ElunaMgr()
 {
+    _shuttingDown = true;
 }
 
 void ElunaMgr::Create(Map* map, ElunaInfo const& info)
@@ -57,7 +60,7 @@ void ElunaMgr::Destroy(ElunaInfo const& info)
 
 ElunaInfo::~ElunaInfo()
 {
-    if (IsValid() && sElunaMgr)
+    if (IsValid() && !ElunaMgr::IsShuttingDown())
         sElunaMgr->Destroy(key);
 }
 
