@@ -8864,6 +8864,20 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
 
     SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::FlightCapabilityID), flightCapabilityId);
 
+    // Araxia: Apply the FlightCapability's associated spell (may enable Vigor UI)
+    if (flightCapabilityId > 0)
+    {
+        if (FlightCapabilityEntry const* flightCapability = sFlightCapabilityStore.LookupEntry(flightCapabilityId))
+        {
+            TC_LOG_INFO("entities.unit", "SetFlightCapabilityID: FlightCapability %d has SpellID %d", 
+                flightCapabilityId, flightCapability->SpellID);
+            if (flightCapability->SpellID > 0)
+            {
+                CastSpell(this, flightCapability->SpellID, true);
+            }
+        }
+    }
+
     UpdateAdvFlyingSpeed(ADV_FLYING_AIR_FRICTION, clientUpdate);
     UpdateAdvFlyingSpeed(ADV_FLYING_MAX_VEL, clientUpdate);
     UpdateAdvFlyingSpeed(ADV_FLYING_LIFT_COEFFICIENT, clientUpdate);

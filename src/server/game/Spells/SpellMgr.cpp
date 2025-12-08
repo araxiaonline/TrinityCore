@@ -5163,7 +5163,8 @@ void SpellMgr::LoadSpellInfoCorrections()
     });
 
     // TODO: temporary, remove with dragonriding
-    ApplySpellFix({ 404468 }, [](SpellInfo* spellInfo)
+    // Araxia: Also prevent Skyriding aura from saving (applied via .flight command)
+    ApplySpellFix({ 404464, 404468 }, [](SpellInfo* spellInfo)
     {
         spellInfo->AttributesCu |= SPELL_ATTR0_CU_AURA_CANNOT_BE_SAVED;
     });

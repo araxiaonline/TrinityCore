@@ -47,6 +47,7 @@ public:
         {
             { "chat",       HandleGMChatCommand,        rbac::RBAC_PERM_COMMAND_GM_CHAT,        Console::No },
             { "fly",        HandleGMFlyCommand,         rbac::RBAC_PERM_COMMAND_GM_FLY,         Console::No },
+            { "advfly",     HandleGMAdvFlyCommand,      rbac::RBAC_PERM_COMMAND_GM_FLY,         Console::No },
             { "ingame",     HandleGMListIngameCommand,  rbac::RBAC_PERM_COMMAND_GM_INGAME,      Console::Yes },
             { "list",       HandleGMListFullCommand,    rbac::RBAC_PERM_COMMAND_GM_LIST,        Console::Yes },
             { "visible",    HandleGMVisibleCommand,     rbac::RBAC_PERM_COMMAND_GM_VISIBLE,     Console::No },
@@ -111,6 +112,35 @@ public:
         }
 
         handler->PSendSysMessage(LANG_COMMAND_FLYMODE_STATUS, handler->GetNameLink(target).c_str(), enable ? "on" : "off");
+        return true;
+    }
+
+    // Araxia: Enable dragonriding/skyriding (advanced flight)
+    static bool HandleGMAdvFlyCommand(ChatHandler* handler, bool enable)
+    {
+        Player* target = handler->getSelectedPlayer();
+        if (!target)
+            target = handler->GetSession()->GetPlayer();
+
+        if (enable)
+        {
+            target->SetCanFly(true);
+            target->SetCanAdvFly(true);
+            target->SetFlightCapabilityID(1, true);  // ID 1 = default FlightCapability
+            target->SetCanTransitionBetweenSwimAndFly(true);
+            handler->PSendSysMessage("Advanced flight (dragonriding) enabled for %s. FlightCapabilityID=1", 
+                handler->GetNameLink(target).c_str());
+        }
+        else
+        {
+            target->SetCanAdvFly(false);
+            target->SetFlightCapabilityID(0, true);
+            target->SetCanFly(false);
+            target->SetCanTransitionBetweenSwimAndFly(false);
+            handler->PSendSysMessage("Advanced flight (dragonriding) disabled for %s", 
+                handler->GetNameLink(target).c_str());
+        }
+
         return true;
     }
 

@@ -14,6 +14,13 @@
 #include "GitRevision.h"
 #include "GameTime.h"
 #include "LuaEngine/ElunaSharedData.h"
+#include "Cell.h"
+#include "CellImpl.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
+#include "Creature.h"
+#include "SpellMgr.h"
+#include "SpellInfo.h"
 #include <sstream>
 
 namespace Araxia
@@ -301,13 +308,151 @@ void RegisterServerTools()
                     {"player", player->GetName()}
                 };
             }
+            // Handle: aura <spellId> - Add aura to player
+            else if (cmd == "aura")
+            {
+                uint32 spellId;
+                if (!(iss >> spellId))
+                    return {{"success", false}, {"error", "Usage: aura <spellId>"}};
+                
+                SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE);
+                if (!spellInfo)
+                    return {{"success", false}, {"error", "Invalid spell ID"}, {"spellId", spellId}};
+                
+                player->AddAura(spellId, player);
+                
+                return {
+                    {"success", true},
+                    {"command", "aura"},
+                    {"player", player->GetName()},
+                    {"spellId", spellId},
+                    {"spellName", spellInfo->SpellName->Str[LOCALE_enUS]}
+                };
+            }
+            // Handle: unaura <spellId> - Remove aura from player
+            else if (cmd == "unaura")
+            {
+                uint32 spellId;
+                if (!(iss >> spellId))
+                    return {{"success", false}, {"error", "Usage: unaura <spellId>"}};
+                
+                if (!player->HasAura(spellId))
+                    return {{"success", false}, {"error", "Player does not have this aura"}, {"spellId", spellId}};
+                
+                player->RemoveAurasDueToSpell(spellId);
+                
+                return {
+                    {"success", true},
+                    {"command", "unaura"},
+                    {"player", player->GetName()},
+                    {"spellId", spellId}
+                };
+            }
+            // Handle: learn <spellId> - Teach spell to player
+            else if (cmd == "learn")
+            {
+                uint32 spellId;
+                if (!(iss >> spellId))
+                    return {{"success", false}, {"error", "Usage: learn <spellId>"}};
+                
+                SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, DIFFICULTY_NONE);
+                if (!spellInfo)
+                    return {{"success", false}, {"error", "Invalid spell ID"}, {"spellId", spellId}};
+                
+                player->LearnSpell(spellId, false);
+                
+                return {
+                    {"success", true},
+                    {"command", "learn"},
+                    {"player", player->GetName()},
+                    {"spellId", spellId},
+                    {"spellName", spellInfo->SpellName->Str[LOCALE_enUS]}
+                };
+            }
+            // Handle: unlearn <spellId> - Remove spell from player
+            else if (cmd == "unlearn")
+            {
+                uint32 spellId;
+                if (!(iss >> spellId))
+                    return {{"success", false}, {"error", "Usage: unlearn <spellId>"}};
+                
+                if (!player->HasSpell(spellId))
+                    return {{"success", false}, {"error", "Player does not have this spell"}, {"spellId", spellId}};
+                
+                player->RemoveSpell(spellId, false, false);
+                
+                return {
+                    {"success", true},
+                    {"command", "unlearn"},
+                    {"player", player->GetName()},
+                    {"spellId", spellId}
+                };
+            }
+            // Handle: respawn - Respawn creatures around player or targeted creature
+            else if (cmd == "respawn")
+            {
+                Map* map = player->GetMap();
+                if (!map)
+                    return {{"success", false}, {"error", "Player not on valid map"}};
+                
+                // Check if player has a creature selected
+                Unit* target = player->GetSelectedUnit();
+                Creature* targetCreature = target ? target->ToCreature() : nullptr;
+                
+                if (targetCreature)
+                {
+                    // Respawn the specific targeted creature
+                    if (targetCreature->isDead())
+                    {
+                        targetCreature->Respawn();
+                        return {
+                            {"success", true},
+                            {"command", "respawn"},
+                            {"mode", "targeted"},
+                            {"creature", targetCreature->GetName()},
+                            {"entry", targetCreature->GetEntry()}
+                        };
+                    }
+                    else
+                    {
+                        // Force despawn and respawn for living creature
+                        targetCreature->DespawnOrUnsummon(0ms, 1s);
+                        return {
+                            {"success", true},
+                            {"command", "respawn"},
+                            {"mode", "force_respawn"},
+                            {"creature", targetCreature->GetName()},
+                            {"entry", targetCreature->GetEntry()},
+                            {"message", "Creature will despawn and respawn in 1 second"}
+                        };
+                    }
+                }
+                else
+                {
+                    // No target - respawn all creatures in area (like .respawn command)
+                    CellCoord p(Trinity::ComputeCellCoord(player->GetPositionX(), player->GetPositionY()));
+                    Cell cell(p);
+                    cell.SetNoCreate();
+                    
+                    Trinity::RespawnDo u;
+                    Trinity::WorldObjectWorker<Trinity::RespawnDo> worker(player, u);
+                    Cell::VisitGridObjects(player, worker, player->GetGridActivationRange());
+                    
+                    return {
+                        {"success", true},
+                        {"command", "respawn"},
+                        {"mode", "area"},
+                        {"message", "Respawned all creatures in area"}
+                    };
+                }
+            }
             
             // Unknown command
             return {
                 {"success", false},
                 {"error", "Unknown or unimplemented command"},
                 {"command", cmd},
-                {"supported", {"go xyz", "tele", "gps", "additem", "die", "revive"}}
+                {"supported", {"go xyz", "tele", "gps", "additem", "die", "revive", "aura", "unaura", "learn", "unlearn", "respawn"}}
             };
         }
     );
