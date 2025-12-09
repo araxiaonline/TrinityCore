@@ -447,12 +447,61 @@ void RegisterServerTools()
                 }
             }
             
+            // Handle: npc reload <entry> - Force respawn all creatures of entry to pick up DB changes
+            else if (cmd == "npc")
+            {
+                std::string subcmd;
+                iss >> subcmd;
+                
+                if (subcmd == "reload")
+                {
+                    uint32 entry = 0;
+                    iss >> entry;
+                    
+                    if (entry > 0)
+                    {
+                        // Reload specific creature entry - despawn and respawn all with this entry
+                        Map* map = player->GetMap();
+                        if (!map)
+                            return {{"success", false}, {"error", "Player not on valid map"}};
+                        
+                        uint32 count = 0;
+                        
+                        // Find all creatures with this entry on the map and force respawn
+                        std::list<Creature*> creatures;
+                        Trinity::AllCreaturesOfEntryInRange check(player, entry, 500.0f);
+                        Trinity::CreatureListSearcher<Trinity::AllCreaturesOfEntryInRange> searcher(player, creatures, check);
+                        Cell::VisitAllObjects(player, searcher, 500.0f);
+                        
+                        for (Creature* creature : creatures)
+                        {
+                            creature->DespawnOrUnsummon(0ms, 1s);
+                            count++;
+                        }
+                        
+                        return {
+                            {"success", true},
+                            {"command", "npc reload"},
+                            {"entry", entry},
+                            {"despawned", count},
+                            {"message", "Creatures will respawn in 1 second with updated DB settings"}
+                        };
+                    }
+                    else
+                    {
+                        return {{"success", false}, {"error", "Usage: npc reload <entry>"}};
+                    }
+                }
+                
+                return {{"success", false}, {"error", "Usage: npc reload <entry>"}};
+            }
+            
             // Unknown command
             return {
                 {"success", false},
                 {"error", "Unknown or unimplemented command"},
                 {"command", cmd},
-                {"supported", {"go xyz", "tele", "gps", "additem", "die", "revive", "aura", "unaura", "learn", "unlearn", "respawn"}}
+                {"supported", {"go xyz", "tele", "gps", "additem", "die", "revive", "aura", "unaura", "learn", "unlearn", "respawn", "npc reload"}}
             };
         }
     );
