@@ -408,19 +408,19 @@ bool MCPPlayerManager::Login(uint32 sessionId, ObjectGuid playerGuid)
     MCPPlayerSession* session = GetSession(sessionId);
     if (!session)
     {
-        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Login failed - session %u not found", sessionId);
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Login failed - session {} not found", sessionId);
         return false;
     }
     
     if (session->isOnline())
     {
-        TC_LOG_WARN("araxia.mcp", "[MCPPlayerManager] Session %u already has player online", sessionId);
+        TC_LOG_WARN("araxia.mcp", "[MCPPlayerManager] Session {} already has player online", sessionId);
         return false;
     }
     
     if (session->loginPending)
     {
-        TC_LOG_WARN("araxia.mcp", "[MCPPlayerManager] Session %u login already pending", sessionId);
+        TC_LOG_WARN("araxia.mcp", "[MCPPlayerManager] Session {} login already pending", sessionId);
         return false;
     }
     
@@ -428,7 +428,7 @@ bool MCPPlayerManager::Login(uint32 sessionId, ObjectGuid playerGuid)
     uint32 accountId = sCharacterCache->GetCharacterAccountIdByGuid(playerGuid);
     if (!accountId)
     {
-        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Character %s not found", playerGuid.ToString().c_str());
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Character {} not found", playerGuid.ToString());
         return false;
     }
     
@@ -458,8 +458,8 @@ bool MCPPlayerManager::Login(uint32 sessionId, ObjectGuid playerGuid)
     
     if (!result)
     {
-        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Character %s not found in database", 
-                    playerGuid.ToString().c_str());
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Character {} not found in database", 
+                    playerGuid.ToString());
         delete session->worldSession;
         session->worldSession = nullptr;
         session->loginPending = false;
@@ -545,7 +545,7 @@ bool MCPPlayerManager::Login(uint32 sessionId, const std::string& characterName)
     ObjectGuid guid = sCharacterCache->GetCharacterGuidByName(characterName);
     if (guid.IsEmpty())
     {
-        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Character '%s' not found", characterName.c_str());
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Character '{}' not found", characterName);
         return false;
     }
     return Login(sessionId, guid);
@@ -561,7 +561,7 @@ void MCPPlayerManager::HandleLoginCallback(SQLQueryHolderBase const& holderBase)
     MCPPlayerSession* session = GetSession(sessionId);
     if (!session)
     {
-        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Login callback but session %u gone!", sessionId);
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Login callback but session {} gone!", sessionId);
         return;
     }
     
@@ -594,7 +594,7 @@ void MCPPlayerManager::HandleLoginCallback(SQLQueryHolderBase const& holderBase)
     Map* map = sMapMgr->CreateMap(session->player->GetMapId(), session->player);
     if (!map || !map->AddPlayerToMap(session->player))
     {
-        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Failed to add player to map %u", session->player->GetMapId());
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Failed to add player to map {}", session->player->GetMapId());
         
         // Try homebind
         if (!session->player->TeleportTo(session->player->m_homebind))
@@ -811,7 +811,7 @@ bool MCPPlayerManager::MoveTo(uint32 sessionId, float x, float y, float z)
     if (!player)
         return false;
     
-    TC_LOG_DEBUG("araxia.mcp", "[MCPPlayerManager] Session %u: Moving to (%.1f, %.1f, %.1f)",
+    TC_LOG_DEBUG("araxia.mcp", "[MCPPlayerManager] Session {}: Moving to ({:.1f}, {:.1f}, {:.1f})",
                 sessionId, x, y, z);
     
     player->GetMotionMaster()->MovePoint(0, x, y, z);

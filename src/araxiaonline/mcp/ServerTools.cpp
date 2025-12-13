@@ -145,8 +145,8 @@ void RegisterServerTools()
             if (!command.empty() && command[0] == '.')
                 command = command.substr(1);
             
-            TC_LOG_INFO("araxia.mcp", "[MCP] GM command: .%s (player: %s)", 
-                        command.c_str(), playerName.empty() ? "first online" : playerName.c_str());
+            TC_LOG_INFO("araxia.mcp", "[MCP] GM command: .{} (player: {})", 
+                        command, playerName.empty() ? "first online" : playerName);
             
             // Find the player
             Player* player = nullptr;
@@ -202,8 +202,8 @@ void RegisterServerTools()
                         player->NearTeleportTo(x, y, z, player->GetOrientation());
                     }
                     
-                    TC_LOG_INFO("araxia.mcp", "[MCP] Teleported %s to (%.2f, %.2f, %.2f) map %u",
-                                player->GetName().c_str(), x, y, z, mapId);
+                    TC_LOG_INFO("araxia.mcp", "[MCP] Teleported {} to ({:.2f}, {:.2f}, {:.2f}) map {}",
+                                player->GetName(), x, y, z, mapId);
                     
                     return {
                         {"success", true},

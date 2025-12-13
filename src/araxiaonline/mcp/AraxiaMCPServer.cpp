@@ -132,7 +132,7 @@ bool MCPServer::Initialize()
     // Start server thread
     _serverThread = std::make_unique<std::thread>(&MCPServer::ServerThread, this);
     
-    TC_LOG_INFO("araxia.mcp", "[MCP] Araxia MCP Server starting on port %u (remote: %s)", 
+    TC_LOG_INFO("araxia.mcp", "[MCP] Araxia MCP Server starting on port {} (remote: {})", 
                 _port, _allowRemote ? "allowed" : "localhost only");
     
     return true;
@@ -177,12 +177,12 @@ void MCPServer::ServerThread()
     
     _running = true;
     
-    TC_LOG_INFO("araxia.mcp", "[MCP] Server listening on %s:%u", bindAddr.c_str(), _port);
+    TC_LOG_INFO("araxia.mcp", "[MCP] Server listening on {}:{}", bindAddr, _port);
     
     if (!_impl->server.listen(bindAddr.c_str(), _port))
     {
         if (!_shutdownRequested)
-            TC_LOG_ERROR("araxia.mcp", "[MCP] Failed to start server on %s:%u", bindAddr.c_str(), _port);
+            TC_LOG_ERROR("araxia.mcp", "[MCP] Failed to start server on {}:{}", bindAddr, _port);
     }
     
     _running = false;
@@ -211,7 +211,7 @@ void MCPServer::RegisterTool(const std::string& name, const std::string& descrip
 {
     std::lock_guard<std::mutex> lock(_toolsMutex);
     _tools[name] = MCPToolInfo{name, description, inputSchema, handler};
-    TC_LOG_DEBUG("araxia.mcp", "[MCP] Registered tool: %s", name.c_str());
+    TC_LOG_DEBUG("araxia.mcp", "[MCP] Registered tool: {}", name);
 }
 
 void MCPServer::UnregisterTool(const std::string& name)

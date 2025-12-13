@@ -272,8 +272,8 @@ void RegisterSpawnTools()
                 };
             }
             
-            TC_LOG_INFO("araxia.mcp", "[MCP] Spawning creature %u (%s) at (%.2f, %.2f, %.2f) on map %u",
-                        entry, cInfo->Name.c_str(), x, y, z, mapId);
+            TC_LOG_INFO("araxia.mcp", "[MCP] Spawning creature {} ({}) at ({:.2f}, {:.2f}, {:.2f}) on map {}",
+                        entry, cInfo->Name, x, y, z, mapId);
             
             // Create the creature
             Creature* creature = new Creature();
@@ -344,7 +344,7 @@ void RegisterSpawnTools()
             uint32 entry = params.value("entry", 0u);
             uint32 mapId = params.value("mapId", 0u);
             
-            TC_LOG_INFO("araxia.mcp", "[MCP] Reloading creatures (entry: %u, map: %u)", entry, mapId);
+            TC_LOG_INFO("araxia.mcp", "[MCP] Reloading creatures (entry: {}, map: {})", entry, mapId);
             
             // TC 11.x doesn't support single-entry reload via API
             // Reload all creature templates
@@ -381,7 +381,7 @@ void RegisterSpawnTools()
             if (command.empty())
                 return {{"success", false}, {"error", "No command specified"}};
             
-            TC_LOG_INFO("araxia.mcp", "[MCP] Console command: %s", command.c_str());
+            TC_LOG_INFO("araxia.mcp", "[MCP] Console command: {}", command);
             
             // Parse the command
             std::istringstream iss(command);

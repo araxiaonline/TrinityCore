@@ -110,7 +110,7 @@ void RegisterDatabaseTools()
                 };
             }
             
-            TC_LOG_DEBUG("araxia.mcp", "[MCP] db_query on %s: %s", database.c_str(), query.c_str());
+            TC_LOG_DEBUG("araxia.mcp", "[MCP] db_query on {}: {}", database, query);
             
             try
             {
@@ -133,7 +133,7 @@ void RegisterDatabaseTools()
             }
             catch (const std::exception& e)
             {
-                TC_LOG_ERROR("araxia.mcp", "[MCP] db_query EXCEPTION: %s", e.what());
+                TC_LOG_ERROR("araxia.mcp", "[MCP] db_query EXCEPTION: {}", e.what());
                 return {
                     {"success", false},
                     {"error", std::string("Query exception: ") + e.what()},
@@ -197,8 +197,8 @@ void RegisterDatabaseTools()
                 };
             }
             
-            TC_LOG_INFO("araxia.mcp", "[MCP] db_execute on %s (reason: %s): %s", 
-                        database.c_str(), reason.c_str(), query.c_str());
+            TC_LOG_INFO("araxia.mcp", "[MCP] db_execute on {} (reason: {}): {}", 
+                        database, reason, query);
             
             try
             {
