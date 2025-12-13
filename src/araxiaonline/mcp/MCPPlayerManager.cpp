@@ -821,7 +821,9 @@ bool MCPPlayerManager::MoveTo(uint32 sessionId, float x, float y, float z)
     TC_LOG_DEBUG("araxia.mcp", "[MCPPlayerManager] Session {}: Moving to ({:.1f}, {:.1f}, {:.1f})",
                 sessionId, x, y, z);
     
-    player->GetMotionMaster()->MovePoint(0, x, y, z);
+    // Use walking speed for natural movement
+    float walkSpeed = player->GetSpeed(MOVE_WALK);
+    player->GetMotionMaster()->MovePoint(0, x, y, z, true, {}, walkSpeed);
     return true;
 }
 
