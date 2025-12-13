@@ -30,14 +30,18 @@ MCPServer::MCPServer() : _impl(std::make_unique<Impl>())
 MCPServer::~MCPServer()
 {
     // Note: During static destruction, other singletons may already be destroyed.
-    // We need to be careful not to access them.
-    try
+    // Shutdown() should have been called from World::~World() already.
+    // Just ensure the thread is properly cleaned up.
+    if (_serverThread)
     {
-        Shutdown();
-    }
-    catch (...)
-    {
-        // Swallow any exceptions during destruction
+        if (_serverThread->joinable())
+        {
+            // Thread still running - try to stop it
+            if (_impl)
+                _impl->server.stop();
+            _serverThread->join();
+        }
+        _serverThread.reset();
     }
 }
 
