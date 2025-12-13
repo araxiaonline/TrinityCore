@@ -736,7 +736,73 @@ bool MCPPlayerManager::TeleportTo(uint32 sessionId, uint32 mapId, float x, float
     TC_LOG_INFO("araxia.mcp", "[MCPPlayerManager] Session {}: Teleporting to ({:.1f}, {:.1f}, {:.1f}) map {}",
                 sessionId, x, y, z, mapId);
     
-    return player->TeleportTo(mapId, x, y, z, o);
+    bool isCrossMap = (player->GetMapId() != mapId);
+    
+    if (!isCrossMap)
+    {
+        // Same map teleport - simple relocate
+        player->NearTeleportTo(x, y, z, o);
+        return true;
+    }
+    
+    // Cross-map teleport - manual implementation for headless sessions
+    // We can't use Player::TeleportTo() + HandleMoveWorldportAck() because
+    // it expects client packets and has state assumptions that don't work headless
+    
+    TC_LOG_DEBUG("araxia.mcp", "[MCPPlayerManager] Session {}: Cross-map teleport from {} to {}", 
+                 sessionId, player->GetMapId(), mapId);
+    
+    // Validate destination
+    if (!MapManager::IsValidMapCoord(mapId, x, y, z))
+    {
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Invalid coordinates for teleport");
+        return false;
+    }
+    
+    // Get/create the destination map
+    Map* newMap = sMapMgr->CreateMap(mapId, player);
+    if (!newMap)
+    {
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Failed to create map {}", mapId);
+        return false;
+    }
+    
+    // Check if we can enter
+    if (newMap->CannotEnter(player))
+    {
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Cannot enter map {}", mapId);
+        return false;
+    }
+    
+    // Remove from current map
+    Map* oldMap = player->FindMap();
+    if (oldMap && player->IsInWorld())
+    {
+        oldMap->RemovePlayerFromMap(player, false);
+    }
+    
+    // Relocate and set new map
+    player->Relocate(x, y, z, o);
+    player->ResetMap();
+    player->SetMap(newMap);
+    player->UpdatePositionData();
+    
+    // Add to new map
+    if (!newMap->AddPlayerToMap(player))
+    {
+        TC_LOG_ERROR("araxia.mcp", "[MCPPlayerManager] Failed to add player to map {}", mapId);
+        // Try to recover by going back to old map
+        if (oldMap)
+        {
+            player->ResetMap();
+            player->SetMap(oldMap);
+            oldMap->AddPlayerToMap(player);
+        }
+        return false;
+    }
+    
+    TC_LOG_INFO("araxia.mcp", "[MCPPlayerManager] Session {}: Cross-map teleport complete", sessionId);
+    return true;
 }
 
 bool MCPPlayerManager::MoveTo(uint32 sessionId, float x, float y, float z)
