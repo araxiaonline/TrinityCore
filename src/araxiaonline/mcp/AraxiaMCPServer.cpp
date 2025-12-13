@@ -3,6 +3,8 @@
  */
 
 #include "AraxiaMCPServer.h"
+#include "AraxiaCore.h"
+#include "MCPPlayerManager.h"
 #include "Config.h"
 #include "Log.h"
 #include "World.h"
@@ -71,6 +73,14 @@ bool MCPServer::Initialize()
     RegisterDatabaseTools();
     RegisterWorldScanTools();  // LIDAR-style spatial awareness
     RegisterSpawnTools();      // Headless spawn management
+    
+    // Initialize AraxiaCore (provides World::Update hook for all Araxia systems)
+    sAraxiaCore->Initialize();
+    
+    // Initialize and register MCP Player tools
+    sMCPPlayerMgr->Initialize();
+    RegisterMCPPlayerTools();  // AI player session management
+    
     // RegisterElunaTools();  // Phase 3
     // RegisterWorldTools();  // Phase 4
     
@@ -133,6 +143,12 @@ void MCPServer::Shutdown()
     // Prevent double shutdown
     if (_shutdownRequested.exchange(true))
         return;
+    
+    // Shutdown MCPPlayerManager first (logs out all AI players)
+    sMCPPlayerMgr->Shutdown();
+    
+    // Shutdown AraxiaCore
+    sAraxiaCore->Shutdown();
     
     // Stop the HTTP server first (this will cause listen() to return)
     // httplib::Server::stop() is thread-safe

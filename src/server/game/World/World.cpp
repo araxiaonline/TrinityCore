@@ -28,6 +28,7 @@
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AreaTriggerDataStore.h"
+#include "AraxiaCore.h"
 #include "ArenaTeamMgr.h"
 #include "AuctionHouseBot.h"
 #include "AuctionHouseMgr.h"
@@ -2173,6 +2174,9 @@ void World::Update(uint32 diff)
     ///- Update Eluna (process reload flag, timed events, async queries)
     if (Eluna* e = GetEluna())
         e->UpdateEluna(diff);
+
+    ///- Update Araxia systems (MCP player sessions, etc.)
+    sAraxiaCore->Update(diff);
 
     ///- Update the different timers
     for (int i = 0; i < WUPDATE_COUNT; ++i)

@@ -1199,6 +1199,9 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         bool Create(ObjectGuid::LowType guidlow, WorldPackets::Character::CharacterCreateInfo const* createInfo);
 
+        // Initialize player for bot/AI use (MCP) - minimal initialization without full LoadFromDB
+        void InitializeForBot(ObjectGuid const& guid, std::string const& name, uint8 race, uint8 class_, uint8 gender, uint8 level);
+
         void Update(uint32 time) override;
 
         void Heartbeat() override;

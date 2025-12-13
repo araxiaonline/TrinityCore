@@ -383,6 +383,50 @@ void Player::CleanupsBeforeDelete(bool finalCleanup)
     Unit::CleanupsBeforeDelete(finalCleanup);
 }
 
+void Player::InitializeForBot(ObjectGuid const& guid, std::string const& name, uint8 race, uint8 class_, uint8 gender, uint8 level)
+{
+    // Minimal initialization for bot/AI players (MCP)
+    // Based on LoadFromDB but without async queries
+    
+    // 1. Create GUID
+    Object::_Create(guid);
+    
+    // 2. Set name
+    m_name = name;
+    
+    // 3. Set race/class/gender
+    SetRace(race);
+    SetClass(class_);
+    SetGender(Gender(gender));
+    
+    // 4. Set level
+    SetLevel(level, false);
+    
+    // 5. Set object scale
+    SetObjectScale(1.0f);
+    
+    // 6. Initialize display IDs
+    InitDisplayIds();
+    
+    // 7. Set faction for race
+    SetFactionForRace(race);
+    
+    // 8. Initialize item slots to null
+    for (uint8 i = 0; i < PLAYER_SLOTS_COUNT; i++)
+        m_items[i] = nullptr;
+    
+    // 9. Set native gender
+    SetNativeGender(Gender(gender));
+    
+    // 10. Initialize stats for level - CRITICAL for proper cleanup
+    InitStatsForLevel();
+    
+    // 11. Set full health
+    SetFullHealth();
+    
+    TC_LOG_DEBUG("entities.player", "Player::InitializeForBot: Initialized bot player '{}' ({})", name, guid.ToString());
+}
+
 bool Player::Create(ObjectGuid::LowType guidlow, WorldPackets::Character::CharacterCreateInfo const* createInfo)
 {
     //FIXME: outfitId not used in player creating

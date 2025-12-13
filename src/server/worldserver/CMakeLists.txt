@@ -40,7 +40,7 @@ endif()
 target_link_libraries(worldserver
   PRIVATE
     trinity-core-interface
-    efsw
+    # efsw removed - already linked transitively via game -> lualib
   PUBLIC
     scripts
     game
