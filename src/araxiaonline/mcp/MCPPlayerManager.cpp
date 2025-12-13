@@ -515,6 +515,10 @@ bool MCPPlayerManager::Login(uint32 sessionId, ObjectGuid playerGuid)
     session->player->SetMap(map);
     session->player->UpdatePositionData();
     
+    // Clear any phase restrictions so bot is visible to everyone
+    session->player->GetPhaseShift().Clear();
+    session->player->GetPhaseShift().AddPhase(169, PhaseFlags::None, nullptr);  // Default phase
+    
     // Link session to player
     session->worldSession->SetPlayer(session->player);
     
@@ -740,8 +744,11 @@ bool MCPPlayerManager::TeleportTo(uint32 sessionId, uint32 mapId, float x, float
     
     if (!isCrossMap)
     {
-        // Same map teleport - simple relocate
-        player->NearTeleportTo(x, y, z, o);
+        // Same map teleport - direct relocate for headless sessions
+        // NearTeleportTo expects client ACK, so we manually relocate
+        player->Relocate(x, y, z, o);
+        player->UpdatePositionData();
+        player->UpdateObjectVisibility();
         return true;
     }
     
