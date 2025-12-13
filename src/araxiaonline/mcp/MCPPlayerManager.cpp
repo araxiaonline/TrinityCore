@@ -914,13 +914,19 @@ std::string MCPPlayerManager::ExecuteCommand(uint32 sessionId, const std::string
     if (!player)
         return "Error: Player not online";
     
-    // For now, just log and return placeholder
-    // Full implementation would use ChatHandler
     TC_LOG_INFO("araxia.mcp", "[MCPPlayerManager] Session {} executing command: {}", 
                 sessionId, command);
     
-    // TODO: Implement proper command execution via ChatHandler
-    return "Command execution logged (full implementation pending)";
+    // Execute command via ChatHandler
+    ChatHandler handler(player->GetSession());
+    
+    // Commands need the dot prefix
+    std::string fullCommand = "." + command;
+    
+    if (handler.ParseCommands(fullCommand.c_str()))
+        return "Command executed successfully";
+    else
+        return "Command failed or not found";
 }
 
 // ============================================================================
