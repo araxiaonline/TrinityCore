@@ -18869,6 +18869,7 @@ void Player::_LoadAuras(PreparedQueryResult auraResult, PreparedQueryResult effe
     }
 
     // TODO: finish dragonriding - this forces old flight mode
+    // Araxia: Players can use .flight toggle to enable Skyriding
     AddAura(404468, this);
 }
 
