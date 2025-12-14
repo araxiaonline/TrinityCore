@@ -480,12 +480,17 @@ public:
     // Remember special cases like ElunaTemplate<Vehicle>::CollectGarbage
     static int CollectGarbage(lua_State* L)
     {
-        Eluna* E = Eluna::GetEluna(L);
-
-        // Get object pointer (and check type, no error)
-        ElunaObject* obj = E->CHECKOBJ<ElunaObject>(1, false);
-        if (obj)
+        // IMPORTANT: Do NOT call Eluna::GetEluna(L) here!
+        // GetEluna uses lua_pushstring which can trigger GC re-entrancy,
+        // causing memory corruption when we're already inside the GC handler.
+        // Instead, get the userdata directly without type checking.
+        
+        void* ud = lua_touserdata(L, 1);
+        if (ud)
+        {
+            ElunaObject* obj = static_cast<ElunaObject*>(ud);
             obj->~ElunaObject();
+        }
         return 0;
     }
 
