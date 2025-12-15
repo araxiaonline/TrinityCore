@@ -21,6 +21,7 @@
 #include "DB2Stores.h"
 #include "GameTime.h"
 #include "Item.h"
+#include "ItemBonusMgr.h"
 #include "Log.h"
 #include "Containers.h"
 #include "ObjectMgr.h"
@@ -586,7 +587,9 @@ bool AuctionBotSeller::GetItemsToSell(SellerConfiguration& config, ItemsToSellAr
 }
 
 // Set items price. All important value are passed by address.
-void AuctionBotSeller::SetPricesOfItem(ItemTemplate const* itemProto, SellerConfiguration& config, uint32& buyout, uint32& bid, uint32 stackCount)
+// scaledItemLevel: If non-zero, use this item level for price calculation instead of base level
+// This ensures scaled items are priced appropriately for their actual power level
+void AuctionBotSeller::SetPricesOfItem(ItemTemplate const* itemProto, SellerConfiguration& config, uint32& buyout, uint32& bid, uint32 stackCount, uint32 scaledItemLevel /*= 0*/)
 {
     uint32 classRatio = config.GetPriceRatioPerClass(ItemClass(itemProto->GetClass()));
     uint32 qualityRatio = config.GetPriceRatioPerQuality(AuctionQuality(itemProto->GetQuality()));
@@ -595,6 +598,9 @@ void AuctionBotSeller::SetPricesOfItem(ItemTemplate const* itemProto, SellerConf
     float buyPrice = itemProto->GetBuyPrice();
     float sellPrice = itemProto->GetSellPrice();
 
+    // Use scaled item level if provided, otherwise use base item level
+    float effectiveItemLevel = scaledItemLevel > 0 ? static_cast<float>(scaledItemLevel) : static_cast<float>(itemProto->GetBaseItemLevel());
+
     if (buyPrice == 0)
     {
         if (sellPrice > 0)
@@ -602,11 +608,20 @@ void AuctionBotSeller::SetPricesOfItem(ItemTemplate const* itemProto, SellerConf
         else
         {
             float divisor = ((itemProto->GetClass() == ITEM_CLASS_WEAPON || itemProto->GetClass() == ITEM_CLASS_ARMOR) ? 284.0f : 80.0f);
-            float tempLevel = (itemProto->GetBaseItemLevel() == 0 ? 1.0f : itemProto->GetBaseItemLevel());
+            float tempLevel = (effectiveItemLevel == 0 ? 1.0f : effectiveItemLevel);
             float tempQuality = (itemProto->GetQuality() == 0 ? 1.0f : itemProto->GetQuality());
 
             buyPrice = tempLevel * tempQuality * static_cast<float>(GetBuyModifier(itemProto))* tempLevel / divisor;
         }
+    }
+    // If item has a buy price but was scaled, apply a multiplier based on item level increase
+    else if (scaledItemLevel > 0 && scaledItemLevel > itemProto->GetBaseItemLevel())
+    {
+        // Scale price proportionally: higher ilvl = higher price
+        // Formula: basePrice * (1 + (deltaLevel * 0.02)) - 2% increase per item level
+        float deltaLevel = static_cast<float>(scaledItemLevel - itemProto->GetBaseItemLevel());
+        float scalingFactor = 1.0f + (deltaLevel * 0.02f);
+        buyPrice *= scalingFactor;
     }
 
     if (sellPrice == 0)
@@ -869,11 +884,47 @@ void AuctionBotSeller::AddNewAuctions(SellerConfiguration& config)
         // Ex:  Notched Shortsword of Stamina will only generate as a Notched Shortsword without this.
         item->SetItemRandomBonusList(GenerateItemRandomBonusListId(itemId));
 
+        // AHBot Item Level Scaling: Apply random item level bonus to equipment items
+        // Uses the same ItemBonusMgr system as Timewalking/Remix for item level deltas
+        // This allows AH to stock gear at varied item levels for players at all progression stages
+        uint32 scaledItemLevel = prototype->GetBaseItemLevel();
+        if (sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_ENABLED))
+        {
+            // Check if we should scale this item (equipment-only filter and chance roll)
+            bool isEquipment = (prototype->GetClass() == ITEM_CLASS_WEAPON || prototype->GetClass() == ITEM_CLASS_ARMOR);
+            bool shouldScale = !sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_EQUIPMENT_ONLY) || isEquipment;
+
+            if (shouldScale && urand(0, 99) < sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_CHANCE))
+            {
+                uint32 minLevel = sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_MIN_ITEM_LEVEL);
+                uint32 maxLevel = sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_MAX_ITEM_LEVEL);
+                uint32 targetLevel = urand(minLevel, maxLevel);
+
+                // Only scale up, not down - if target is below base level, skip scaling
+                if (targetLevel > prototype->GetBaseItemLevel())
+                {
+                    int16 delta = static_cast<int16>(targetLevel - prototype->GetBaseItemLevel());
+                    if (uint32 bonusListId = ItemBonusMgr::GetItemBonusListForItemLevelDelta(delta))
+                    {
+                        item->AddBonuses(bonusListId);
+                        scaledItemLevel = targetLevel;
+                        TC_LOG_DEBUG("ahbot", "AHBot: Scaled item {} from ilvl {} to {} (delta: {}, bonus: {})",
+                            itemId, prototype->GetBaseItemLevel(), targetLevel, delta, bonusListId);
+                    }
+                    else
+                    {
+                        TC_LOG_DEBUG("ahbot", "AHBot: No bonus list found for item {} delta {} - keeping base ilvl {}",
+                            itemId, delta, prototype->GetBaseItemLevel());
+                    }
+                }
+            }
+        }
+
         uint32 buyoutPrice;
         uint32 bidPrice = 0;
 
-        // Price of items are set here
-        SetPricesOfItem(prototype, config, buyoutPrice, bidPrice, stackCount);
+        // Price of items are set here - pass scaled item level for price calculation
+        SetPricesOfItem(prototype, config, buyoutPrice, bidPrice, stackCount, scaledItemLevel);
 
         // Deposit time
         uint32 etime = urand(1, 3);

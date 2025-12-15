@@ -167,6 +167,11 @@ void AuctionBotConfig::GetConfigFromFile()
     SetConfig(CONFIG_AHBOT_ITEMS_LOOT, "AuctionHouseBot.Items.Loot", true);
     SetConfig(CONFIG_AHBOT_ITEMS_MISC, "AuctionHouseBot.Items.Misc", false);
 
+    // AHBot Item Level Scaling - applies random item level bonuses to equipment
+    // Uses ItemBonusMgr::GetItemBonusListForItemLevelDelta() (same system as Timewalking/Remix)
+    SetConfig(CONFIG_AHBOT_ITEM_SCALING_ENABLED, "AuctionHouseBot.Items.Scaling.Enabled", false);
+    SetConfig(CONFIG_AHBOT_ITEM_SCALING_EQUIPMENT_ONLY, "AuctionHouseBot.Items.Scaling.EquipmentOnly", true);
+
     SetConfig(CONFIG_AHBOT_BIND_NO, "AuctionHouseBot.Bind.No", true);
     SetConfig(CONFIG_AHBOT_BIND_PICKUP, "AuctionHouseBot.Bind.Pickup", false);
     SetConfig(CONFIG_AHBOT_BIND_EQUIP, "AuctionHouseBot.Bind.Equip", true);
@@ -181,6 +186,10 @@ void AuctionBotConfig::GetConfigFromFile()
 
     SetConfig(CONFIG_AHBOT_ITEM_MIN_ITEM_LEVEL, "AuctionHouseBot.Items.ItemLevel.Min", 0);
     SetConfig(CONFIG_AHBOT_ITEM_MAX_ITEM_LEVEL, "AuctionHouseBot.Items.ItemLevel.Max", 0);
+    // Item level scaling range and chance (only used when scaling is enabled)
+    SetConfig(CONFIG_AHBOT_ITEM_SCALING_MIN_ITEM_LEVEL, "AuctionHouseBot.Items.Scaling.MinItemLevel", 0);
+    SetConfig(CONFIG_AHBOT_ITEM_SCALING_MAX_ITEM_LEVEL, "AuctionHouseBot.Items.Scaling.MaxItemLevel", 550);
+    SetConfigMax(CONFIG_AHBOT_ITEM_SCALING_CHANCE, "AuctionHouseBot.Items.Scaling.Chance", 50, 100);
     SetConfig(CONFIG_AHBOT_ITEM_MIN_REQ_LEVEL, "AuctionHouseBot.Items.ReqLevel.Min", 0);
     SetConfig(CONFIG_AHBOT_ITEM_MAX_REQ_LEVEL, "AuctionHouseBot.Items.ReqLevel.Max", 0);
     SetConfig(CONFIG_AHBOT_ITEM_MIN_SKILL_RANK, "AuctionHouseBot.Items.ReqSkill.Min", 0);
