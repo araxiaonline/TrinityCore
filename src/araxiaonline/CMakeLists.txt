@@ -37,4 +37,27 @@ target_link_libraries(game
     zeromq
 )
 
+# Install araxia.conf.dist to the config directory
+# It will be loaded after worldserver.conf via the .conf.d mechanism
+# Note: We use a custom target since game target is defined elsewhere
+if(COPY_CONF)
+  if(UNIX)
+    # Copy to build output during build
+    add_custom_target(araxia-conf ALL
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/../etc/worldserver.conf.d
+      COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/araxia.conf.dist ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/../etc/worldserver.conf.d/araxia.conf.dist
+      COMMENT "[Araxia] Copying araxia.conf.dist to etc/worldserver.conf.d/"
+    )
+    # Install to system config directory
+    install(FILES araxia.conf.dist DESTINATION ${CONF_DIR}/worldserver.conf.d)
+  elseif(WIN32)
+    add_custom_target(araxia-conf ALL
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/worldserver.conf.d
+      COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/araxia.conf.dist ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/worldserver.conf.d/
+      COMMENT "[Araxia] Copying araxia.conf.dist to worldserver.conf.d/"
+    )
+    install(FILES araxia.conf.dist DESTINATION "${CMAKE_INSTALL_PREFIX}/worldserver.conf.d")
+  endif()
+endif()
+
 message(STATUS "[Araxia] Custom code sources added")
