@@ -2,6 +2,33 @@
  * Araxia MCP Server - Server Tools
  * 
  * Basic server information and control tools.
+ * 
+ * =============================================================================
+ * IMPORTANT: GM Command Implementation Pattern
+ * =============================================================================
+ * 
+ * When adding new GM commands to gm_command tool:
+ * 
+ * 1. PREFER using ChatHandler::ParseCommands() as a fallback rather than
+ *    reimplementing command logic. This allows ANY existing GM command to
+ *    work through MCP without custom code.
+ * 
+ * 2. Only implement custom handlers when you need:
+ *    - Structured JSON response with specific data (e.g., coordinates from "gps")
+ *    - Custom error handling or validation
+ *    - Modified behavior from the standard command
+ * 
+ * 3. The fallback pattern at the end of gm_command:
+ *    ```cpp
+ *    ChatHandler handler(player->GetSession());
+ *    bool success = handler.ParseCommands(command);
+ *    ```
+ *    This executes the command exactly as if typed in-game with a leading dot.
+ * 
+ * 4. Available GM commands are defined in src/server/scripts/Commands/cs_*.cpp
+ *    Check there for command names and required permissions.
+ * 
+ * =============================================================================
  */
 
 #include "AraxiaMCPServer.h"
@@ -21,6 +48,9 @@
 #include "Creature.h"
 #include "SpellMgr.h"
 #include "SpellInfo.h"
+#include "ObjectMgr.h"
+#include "SmartScriptMgr.h"
+#include "Chat.h"
 #include <sstream>
 
 namespace Araxia
@@ -446,6 +476,47 @@ void RegisterServerTools()
                     };
                 }
             }
+            // Handle: reload <type> - Reload various data from database
+            else if (cmd == "reload")
+            {
+                std::string reloadType;
+                iss >> reloadType;
+                
+                if (reloadType.empty())
+                {
+                    return {
+                        {"success", false},
+                        {"error", "Usage: reload <type>"},
+                        {"supported_types", {"smart_scripts", "creature_template", "game_tele"}}
+                    };
+                }
+                
+                TC_LOG_INFO("araxia.mcp", "[MCP] Reloading: {}", reloadType);
+                
+                if (reloadType == "smart_scripts" || reloadType == "smartai" || reloadType == "smart")
+                {
+                    sSmartScriptMgr->LoadSmartAIFromDB();
+                    return {{"success", true}, {"command", "reload"}, {"type", "smart_scripts"}, {"message", "SmartAI scripts reloaded from database"}};
+                }
+                else if (reloadType == "creature" || reloadType == "creature_template")
+                {
+                    sObjectMgr->LoadCreatureTemplates();
+                    return {{"success", true}, {"command", "reload"}, {"type", "creature_template"}, {"message", "Creature templates reloaded. Note: Existing spawns need server restart."}};
+                }
+                else if (reloadType == "game_tele" || reloadType == "tele")
+                {
+                    sObjectMgr->LoadGameTele();
+                    return {{"success", true}, {"command", "reload"}, {"type", "game_tele"}, {"message", "Teleport locations reloaded"}};
+                }
+                else
+                {
+                    return {
+                        {"success", false},
+                        {"error", "Unknown reload type: " + reloadType},
+                        {"supported_types", {"smart_scripts", "creature_template", "game_tele"}}
+                    };
+                }
+            }
             // Handle: levelup [level] - Level up player to specified level (or +1 if no level given)
             else if (cmd == "levelup")
             {
@@ -478,13 +549,27 @@ void RegisterServerTools()
                 };
             }
             
-            // Unknown command
-            return {
-                {"success", false},
-                {"error", "Unknown or unimplemented command"},
-                {"command", cmd},
-                {"supported", {"go xyz", "tele", "gps", "additem", "die", "revive", "aura", "unaura", "learn", "unlearn", "respawn", "levelup"}}
-            };
+            // Fallback: Pass any unhandled command to ChatHandler (existing GM command system)
+            // This allows MCP to execute ANY GM command without reimplementing logic
+            // NOTE: ChatHandler::ParseCommands expects commands WITH leading dot (e.g., ".npc add")
+            else
+            {
+                ChatHandler handler(player->GetSession());
+                std::string dotCommand = "." + command;  // Add leading dot for ChatHandler
+                bool success = handler.ParseCommands(dotCommand);
+                
+                TC_LOG_INFO("araxia.mcp", "[MCP] Executed via ChatHandler: {} (success: {})", command, success);
+                
+                return {
+                    {"success", success},
+                    {"command", command},
+                    {"method", "ChatHandler"},
+                    {"message", success ? "Command executed via GM command system" : "Command failed or unknown"}
+                };
+            }
+            
+            // Unreachable - but satisfies compiler warning about all paths returning
+            return {{"success", false}, {"error", "Unreachable code path"}};
         }
     );
     
