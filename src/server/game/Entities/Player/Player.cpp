@@ -16,6 +16,8 @@
  */
 
 #include "Player.h"
+#include "AraxiaEventBus.h"
+#include "AraxiaEventBusConfig.h"
 #include "AreaTrigger.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
@@ -1585,10 +1587,32 @@ void Player::AddToWorld()
     for (uint8 i = PLAYER_SLOT_START; i < PLAYER_SLOT_END; ++i)
         if (m_items[i])
             m_items[i]->AddToWorld();
+
+    // Araxia: Publish player login event to ZeroMQ event bus
+    if (sAraxiaEventBusConfig->IsPlayerEventsEnabled() && sAraxiaEventBus->IsInitialized())
+    {
+        uint32 mapId = GetMapId();
+        EventContext ctx;
+        ctx.MapId = mapId;
+        ctx.InstanceId = GetInstanceId();
+        ctx.Type = sAraxiaEventBus->GetContentTypeForMap(mapId);
+        sAraxiaEventBus->PublishPlayerEvent("login", GetGUID().GetCounter(), GetName(), ctx);
+    }
 }
 
 void Player::RemoveFromWorld()
 {
+    // Araxia: Publish player logout event to ZeroMQ event bus (before cleanup)
+    if (IsInWorld() && sAraxiaEventBusConfig->IsPlayerEventsEnabled() && sAraxiaEventBus->IsInitialized())
+    {
+        uint32 mapId = GetMapId();
+        EventContext ctx;
+        ctx.MapId = mapId;
+        ctx.InstanceId = GetInstanceId();
+        ctx.Type = sAraxiaEventBus->GetContentTypeForMap(mapId);
+        sAraxiaEventBus->PublishPlayerEvent("logout", GetGUID().GetCounter(), GetName(), ctx);
+    }
+
     // cleanup
     if (IsInWorld())
     {
@@ -4481,6 +4505,17 @@ void Player::ResurrectPlayer(float restore_percent, bool applySickness)
 
 void Player::KillPlayer()
 {
+    // Araxia: Publish player death event to ZeroMQ event bus
+    if (sAraxiaEventBusConfig->IsPlayerEventsEnabled() && sAraxiaEventBus->IsInitialized())
+    {
+        uint32 mapId = GetMapId();
+        EventContext ctx;
+        ctx.MapId = mapId;
+        ctx.InstanceId = GetInstanceId();
+        ctx.Type = sAraxiaEventBus->GetContentTypeForMap(mapId);
+        sAraxiaEventBus->PublishPlayerEvent("death", GetGUID().GetCounter(), GetName(), ctx);
+    }
+
     if (IsFlying() && !GetTransport())
         GetMotionMaster()->MoveFall();
 
