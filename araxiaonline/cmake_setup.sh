@@ -3,7 +3,7 @@
 # run this script from the build directory with
 # bash ../araxiaonline/cmake_setup.sh
 cmake .. \
-    -DCMAKE_INSTALL_PREFIX="/opt/trinitycore" \
+    -DCMAKE_INSTALL_PREFIX="/opt/trinitycore/server" \
     -DCMAKE_BUILD_TYPE="RelWithDebInfo" \
     -DTOOLS=1 \
     -DSERVERS=1 \

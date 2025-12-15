@@ -446,13 +446,44 @@ void RegisterServerTools()
                     };
                 }
             }
+            // Handle: levelup [level] - Level up player to specified level (or +1 if no level given)
+            else if (cmd == "levelup")
+            {
+                int levelInt;
+                uint8 newLevel;
+                if (!(iss >> levelInt))
+                {
+                    // No level specified, add 1
+                    newLevel = player->GetLevel() + 1;
+                }
+                else
+                {
+                    newLevel = static_cast<uint8>(std::clamp(levelInt, 1, 80));
+                }
+                
+                uint8 oldLevel = player->GetLevel();
+                if (newLevel == oldLevel)
+                    return {{"success", true}, {"command", "levelup"}, {"player", player->GetName()}, {"level", newLevel}, {"message", "Already at this level"}};
+                
+                player->GiveLevel(newLevel);
+                player->InitTalentForLevel();
+                player->SetXP(0);
+                
+                return {
+                    {"success", true},
+                    {"command", "levelup"},
+                    {"player", player->GetName()},
+                    {"oldLevel", oldLevel},
+                    {"newLevel", newLevel}
+                };
+            }
             
             // Unknown command
             return {
                 {"success", false},
                 {"error", "Unknown or unimplemented command"},
                 {"command", cmd},
-                {"supported", {"go xyz", "tele", "gps", "additem", "die", "revive", "aura", "unaura", "learn", "unlearn", "respawn"}}
+                {"supported", {"go xyz", "tele", "gps", "additem", "die", "revive", "aura", "unaura", "learn", "unlearn", "respawn", "levelup"}}
             };
         }
     );
