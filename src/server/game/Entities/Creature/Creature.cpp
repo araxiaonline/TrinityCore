@@ -17,7 +17,6 @@
 
 #include "Creature.h"
 #include "AraxiaEventBus.h"
-#include "AraxiaEventBusConfig.h"
 #include "BattlegroundMgr.h"
 #include "CellImpl.h"
 #include "CharmInfo.h"
@@ -363,23 +362,17 @@ void Creature::AddToWorld()
             GetZoneScript()->OnCreatureCreate(this);
 
         // Araxia: Publish spawn event to ZeroMQ event bus
-        if (sAraxiaEventBusConfig->IsSpawnEventsEnabled() && sAraxiaEventBus->IsInitialized())
-        {
-            uint32 mapId = GetMapId();
-            uint32 instanceId = GetInstanceId();
-            ContentType contentType = sAraxiaEventBus->GetContentTypeForMap(mapId);
-            sAraxiaEventBus->PublishSpawnEvent(
-                contentType,
-                true, // isCreate
-                GetGUID().GetCounter(),
-                GetEntry(),
-                mapId,
-                instanceId,
-                GetPositionX(),
-                GetPositionY(),
-                GetPositionZ()
-            );
-        }
+        sAraxiaEventBus->Publish(SpawnEvent(
+            true, // isCreate
+            GetGUID().GetCounter(),
+            GetEntry(),
+            GetMapId(),
+            GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(GetMapId()),
+            GetPositionX(),
+            GetPositionY(),
+            GetPositionZ()
+        ));
     }
 }
 
@@ -388,23 +381,17 @@ void Creature::RemoveFromWorld()
     if (IsInWorld())
     {
         // Araxia: Publish despawn event to ZeroMQ event bus (before removal)
-        if (sAraxiaEventBusConfig->IsSpawnEventsEnabled() && sAraxiaEventBus->IsInitialized())
-        {
-            uint32 mapId = GetMapId();
-            uint32 instanceId = GetInstanceId();
-            ContentType contentType = sAraxiaEventBus->GetContentTypeForMap(mapId);
-            sAraxiaEventBus->PublishSpawnEvent(
-                contentType,
-                false, // isCreate = false means delete/despawn
-                GetGUID().GetCounter(),
-                GetEntry(),
-                mapId,
-                instanceId,
-                GetPositionX(),
-                GetPositionY(),
-                GetPositionZ()
-            );
-        }
+        sAraxiaEventBus->Publish(SpawnEvent(
+            false, // isCreate = false means delete/despawn
+            GetGUID().GetCounter(),
+            GetEntry(),
+            GetMapId(),
+            GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(GetMapId()),
+            GetPositionX(),
+            GetPositionY(),
+            GetPositionZ()
+        ));
 
         if (GetZoneScript())
             GetZoneScript()->OnCreatureRemove(this);

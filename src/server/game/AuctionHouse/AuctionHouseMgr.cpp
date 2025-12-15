@@ -17,6 +17,8 @@
 
 #include "AuctionHouseMgr.h"
 #include "AccountMgr.h"
+#include "AraxiaEventBus.h"
+#include "AraxiaEvents.h"
 #include "AuctionHouseBot.h"
 #include "AuctionHousePackets.h"
 #include "Bag.h"
@@ -1831,6 +1833,35 @@ void AuctionHouseObject::SendAuctionSold(AuctionPosting const* auction, Player* 
     if (!owner)
         owner = ObjectAccessor::FindConnectedPlayer(auction->Owner);
 
+    // Araxia: Publish auction sold event to ZeroMQ event bus
+    std::string sellerName;
+    if (owner)
+        sellerName = owner->GetName();
+    else if (CharacterCacheEntry const* entry = sCharacterCache->GetCharacterCacheByGuid(auction->Owner))
+        sellerName = entry->Name;
+    
+    // Get first item entry for the event (auctions can have multiple items)
+    uint32 itemEntry = 0;
+    uint32 itemCount = 0;
+    if (!auction->Items.empty())
+    {
+        itemEntry = auction->Items[0]->GetEntry();
+        for (Item const* item : auction->Items)
+            itemCount += item->GetCount();
+    }
+    
+    sAraxiaEventBus->Publish(AuctionEvent(
+        "sold",
+        auction->Owner.GetCounter(),
+        sellerName,
+        auction->Id,
+        itemEntry,
+        itemCount,
+        auction->BidAmount,
+        0, 0,  // mapId/instanceId not applicable for auctions
+        ContentType::World
+    ));
+
     // owner exist
     if ((owner || sCharacterCache->HasCharacterCacheEntry(auction->Owner)) && !sAuctionBotConfig->IsBotChar(auction->Owner))
     {
@@ -1856,6 +1887,35 @@ void AuctionHouseObject::SendAuctionSold(AuctionPosting const* auction, Player* 
 void AuctionHouseObject::SendAuctionExpired(AuctionPosting const* auction, CharacterDatabaseTransaction trans) const
 {
     Player* owner = ObjectAccessor::FindConnectedPlayer(auction->Owner);
+    
+    // Araxia: Publish auction expired event to ZeroMQ event bus
+    std::string sellerName;
+    if (owner)
+        sellerName = owner->GetName();
+    else if (CharacterCacheEntry const* entry = sCharacterCache->GetCharacterCacheByGuid(auction->Owner))
+        sellerName = entry->Name;
+    
+    uint32 itemEntry = 0;
+    uint32 itemCount = 0;
+    if (!auction->Items.empty())
+    {
+        itemEntry = auction->Items[0]->GetEntry();
+        for (Item const* item : auction->Items)
+            itemCount += item->GetCount();
+    }
+    
+    sAraxiaEventBus->Publish(AuctionEvent(
+        "expired",
+        auction->Owner.GetCounter(),
+        sellerName,
+        auction->Id,
+        itemEntry,
+        itemCount,
+        auction->BuyoutOrUnitPrice,
+        0, 0,
+        ContentType::World
+    ));
+    
     // owner exist
     if ((owner || sCharacterCache->HasCharacterCacheEntry(auction->Owner)) && !sAuctionBotConfig->IsBotChar(auction->Owner))
     {

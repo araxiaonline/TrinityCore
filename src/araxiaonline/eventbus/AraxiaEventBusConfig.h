@@ -24,9 +24,9 @@
  * Reads settings from worldserver.conf:
  *   Araxia.EventBus.PublishEndpoint
  *   Araxia.EventBus.SubscribeEndpoint
- *   Araxia.EventBus.EnableSpawnEvents
- *   Araxia.EventBus.EnableEncounterEvents
- *   Araxia.EventBus.EnablePlayerEvents
+ *   Araxia.EventBus.Enable*Events (Spawn, Encounter, Player, Combat, Loot, Quest,
+ *                                  Zone, Party, Item, Spell, Level, Chat,
+ *                                  Achievement, Auction, Mail, Trade, Guild)
  */
 
 #include "Define.h"
@@ -46,6 +46,20 @@ public:
     bool IsSpawnEventsEnabled() const { return _enableSpawnEvents; }
     bool IsEncounterEventsEnabled() const { return _enableEncounterEvents; }
     bool IsPlayerEventsEnabled() const { return _enablePlayerEvents; }
+    bool IsCombatEventsEnabled() const { return _enableCombatEvents; }
+    bool IsLootEventsEnabled() const { return _enableLootEvents; }
+    bool IsQuestEventsEnabled() const { return _enableQuestEvents; }
+    bool IsZoneEventsEnabled() const { return _enableZoneEvents; }
+    bool IsPartyEventsEnabled() const { return _enablePartyEvents; }
+    bool IsItemEventsEnabled() const { return _enableItemEvents; }
+    bool IsSpellEventsEnabled() const { return _enableSpellEvents; }
+    bool IsLevelEventsEnabled() const { return _enableLevelEvents; }
+    bool IsChatEventsEnabled() const { return _enableChatEvents; }
+    bool IsAchievementEventsEnabled() const { return _enableAchievementEvents; }
+    bool IsAuctionEventsEnabled() const { return _enableAuctionEvents; }
+    bool IsMailEventsEnabled() const { return _enableMailEvents; }
+    bool IsTradeEventsEnabled() const { return _enableTradeEvents; }
+    bool IsGuildEventsEnabled() const { return _enableGuildEvents; }
     
 private:
     AraxiaEventBusConfig() = default;
@@ -55,6 +69,20 @@ private:
     bool _enableSpawnEvents = true;
     bool _enableEncounterEvents = true;
     bool _enablePlayerEvents = true;
+    bool _enableCombatEvents = true;
+    bool _enableLootEvents = true;
+    bool _enableQuestEvents = true;
+    bool _enableZoneEvents = true;
+    bool _enablePartyEvents = true;
+    bool _enableItemEvents = true;
+    bool _enableSpellEvents = false;  // Disabled by default - very high volume
+    bool _enableLevelEvents = true;
+    bool _enableChatEvents = true;
+    bool _enableAchievementEvents = true;
+    bool _enableAuctionEvents = true;
+    bool _enableMailEvents = true;
+    bool _enableTradeEvents = true;
+    bool _enableGuildEvents = true;
 };
 
 #define sAraxiaEventBusConfig AraxiaEventBusConfig::Instance()

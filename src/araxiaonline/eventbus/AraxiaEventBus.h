@@ -37,6 +37,7 @@
  */
 
 #include "Define.h"
+#include "AraxiaEvents.h"
 #include <string>
 #include <functional>
 #include <memory>
@@ -50,28 +51,6 @@ namespace zmq {
     class context_t;
     class socket_t;
 }
-
-// Content type for topic routing
-enum class ContentType : uint8
-{
-    World       = 0,    // Open world (non-instanced)
-    Dungeon     = 1,    // 5-man dungeon
-    Raid        = 2,    // Raid instance
-    Battleground = 3,   // PvP battleground
-    Arena       = 4     // Arena
-};
-
-// Event context for filtering
-struct TC_GAME_API EventContext
-{
-    uint32 MapId = 0;
-    uint32 InstanceId = 0;
-    uint32 Difficulty = 0;
-    uint32 ZoneId = 0;
-    ContentType Type = ContentType::World;
-    
-    std::string ToJson() const;
-};
 
 // Subscription handler callback
 using EventHandler = std::function<void(const std::string& topic, const std::string& payload)>;
@@ -89,18 +68,14 @@ public:
     void Shutdown();
     bool IsInitialized() const { return _initialized; }
     
-    // Publishing - generic
+    // Publishing - event interface (preferred)
+    // Usage: sAraxiaEventBus->Publish(SpawnEvent(...));
+    // The event handles its own topic, payload, and config check
+    void Publish(const IAraxiaEvent& event);
+    
+    // Publishing - generic (for custom events)
     void Publish(const std::string& topic, const std::string& jsonPayload);
     void Publish(const std::string& topic, const EventContext& context, const std::string& jsonPayload);
-    
-    // Publishing - typed helpers
-    void PublishSpawnEvent(ContentType type, bool isCreate, uint64 guid, uint32 entry, 
-                           uint32 mapId, uint32 instanceId, float x, float y, float z);
-    void PublishEncounterEvent(ContentType type, const std::string& eventType, 
-                               uint32 encounterId, uint32 mapId, uint32 instanceId, 
-                               const std::string& extraJson = "{}");
-    void PublishPlayerEvent(const std::string& eventType, uint64 playerGuid, 
-                            const std::string& playerName, const EventContext& context);
     
     // Subscribing
     void Subscribe(const std::string& topicPrefix, EventHandler handler);

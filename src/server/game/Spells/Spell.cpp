@@ -16,6 +16,8 @@
  */
 
 #include "Spell.h"
+#include "AraxiaEventBus.h"
+#include "AraxiaEvents.h"
 #include "AzeriteEmpoweredItem.h"
 #include "Battlefield.h"
 #include "BattlefieldMgr.h"
@@ -4860,6 +4862,32 @@ void Spell::SendSpellGo()
     // not send invisible spell casting
     if (!IsNeedSendToClient())
         return;
+
+    // Araxia: Publish spell cast event to ZeroMQ event bus
+    // Only for player casts to reduce volume (this is a high-frequency event)
+    if (Player* playerCaster = m_caster->ToPlayer())
+    {
+        // Get target info if available
+        uint64 targetGuid = 0;
+        bool isTargetPlayer = false;
+        
+        if (Unit* target = m_targets.GetUnitTarget())
+        {
+            targetGuid = target->GetGUID().GetCounter();
+            isTargetPlayer = target->GetTypeId() == TYPEID_PLAYER;
+        }
+        
+        sAraxiaEventBus->Publish(SpellCastEvent(
+            playerCaster->GetGUID().GetCounter(),
+            playerCaster->GetName(),
+            m_spellInfo->Id,
+            targetGuid,
+            isTargetPlayer,
+            playerCaster->GetMapId(),
+            playerCaster->GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(playerCaster->GetMapId())
+        ));
+    }
 
     TC_LOG_DEBUG("spells", "Sending SMSG_SPELL_GO id={}", m_spellInfo->Id);
 

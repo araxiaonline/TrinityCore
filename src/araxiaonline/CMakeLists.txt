@@ -4,12 +4,26 @@
 # Build eventbus as separate library (has ZMQ dependency)
 add_subdirectory(eventbus)
 
-# Collect sources EXCLUDING eventbus (it's built as separate library)
+# Collect sources EXCLUDING certain directories
+# 
+# IMPORTANT: CollectSourceFiles (defined in cmake/macros/AutoCollect.cmake) requires
+# FULL PATHS for exclusions, not just directory names. Using bare names like "eventbus"
+# will silently fail to exclude the directory.
+#
+# Exclusions:
+#   - eventbus: Built as separate library with ZMQ dependency
+#   - tools: Contains Python scripts and virtual environments (.venv)
+#            The .venv directory contains C files from Python packages (e.g., pyzmq's
+#            _cffi_src.c) which would cause CMake to generate a C precompiled header.
+#            Since gamePCH.h includes C++ headers (<cstddef>, etc.), the C PCH build
+#            fails with "cstddef file not found". Excluding tools/ prevents this.
+#
 CollectSourceFiles(
   ${CMAKE_CURRENT_SOURCE_DIR}
   PRIVATE_SOURCES
-  SKIP_DIRS
-    eventbus)
+  # Exclude - MUST be full paths, see comment above
+  ${CMAKE_CURRENT_SOURCE_DIR}/eventbus
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 
 GroupSources(${CMAKE_CURRENT_SOURCE_DIR})
 

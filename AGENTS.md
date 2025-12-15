@@ -45,3 +45,69 @@ handler.ParseCommands(command);
 ### Key Files with Important Comments:
 - `src/araxiaonline/mcp/ServerTools.cpp` - GM command implementation pattern
 - `src/araxiaonline/mcp/AraxiaMCPServer.cpp` - MCP server architecture
+- `src/araxiaonline/eventbus/AraxiaEvents.h` - Event interface and concrete event classes
+
+---
+
+## Araxia Event Bus
+
+The Event Bus is a ZeroMQ-based real-time event system that publishes game events to external consumers.
+
+- **Documentation**: `/opt/trinitycore/araxia-content-tools/docs/game_engine/araxia_event_bus.md`
+- **Source**: `src/araxiaonline/eventbus/`
+- **Port**: `tcp://*:5555` (configurable)
+
+### Supported Events
+| Category | Events |
+|----------|--------|
+| Player | login, logout, death |
+| Quest | accept, complete, abandon |
+| Combat | enter, leave |
+| Loot | item |
+| Spawn | create, delete |
+| Encounter | start, wipe, end |
+
+### Quick Test
+```bash
+cd /opt/trinitycore/TrinityCore/src/araxiaonline/tools
+source .venv/bin/activate
+python zmq_subscriber.py
+```
+
+**Keep the wiki page updated** when adding new event types or changing the event bus architecture.
+
+---
+
+## AI Testing with Scarletseer
+
+**Scarletseer** is a dedicated test character for AI assistants to use for automated testing via MCP.
+
+- **Character**: Scarletseer (GUID 7, Level 80 Tauren Shaman)
+- **Location**: Pandaria (Map 870) - Halfhill Farm area
+- **Documentation**: See `/opt/trinitycore/araxia-content-tools/docs/game_engine/scarletseer.md`
+
+### Quick Start
+```
+mcp_session_create(owner_name="Cascade")
+mcp_player_login(session_id=1, character_name="Scarletseer")
+mcp_player_status(session_id=1)  # Verify login
+# ... run tests ...
+mcp_player_logout(session_id=1)
+```
+
+### Event Bus Testing
+Scarletseer can trigger events for the ZeroMQ event bus:
+- **Player events**: login, logout, death
+- **Quest events**: accept, complete, abandon
+- **Combat events**: enter, leave
+- **Loot events**: item looted
+- **Encounter events**: start, wipe, end (requires dungeon/raid)
+
+Monitor events with: `python /opt/trinitycore/TrinityCore/src/araxiaonline/tools/zmq_subscriber.py`
+
+---
+
+### Building the server
+- Always use the max number of threads when building the server
+- Always use @araxiaonline/cmake_setup.sh to setup the build environment. Modify it if needed.
+- Please fix all compile warnings before marking a task as complete.

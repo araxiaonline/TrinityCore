@@ -167,82 +167,21 @@ void AraxiaEventBus::Publish(const std::string& topic, const EventContext& conte
 
 std::string AraxiaEventBus::ContentTypeToPrefix(ContentType type)
 {
-    switch (type)
-    {
-        case ContentType::World:        return "world";
-        case ContentType::Dungeon:      return "dungeon";
-        case ContentType::Raid:         return "raid";
-        case ContentType::Battleground: return "bg";
-        case ContentType::Arena:        return "arena";
-        default:                        return "world";
-    }
+    // Delegate to the shared helper in AraxiaEvents.h
+    return ::ContentTypeToPrefix(type);
 }
 
-void AraxiaEventBus::PublishSpawnEvent(ContentType type, bool isCreate, uint64 guid, uint32 entry,
-                                       uint32 mapId, uint32 instanceId, float x, float y, float z)
+void AraxiaEventBus::Publish(const IAraxiaEvent& event)
 {
-    std::string prefix = ContentTypeToPrefix(type);
-    std::string topic = prefix + ".spawn." + (isCreate ? "create" : "delete");
+    // Early out if not initialized or this event type is disabled
+    // Each event implements IsEnabled() to check its specific config toggle
+    if (!IsInitialized() || !event.IsEnabled())
+        return;
     
-    // Debug: Log spawn events to verify they're being called
-    TC_LOG_DEBUG("araxia.eventbus", "PublishSpawnEvent: {} entry={} guid={} map={}", 
-                 topic, entry, guid, mapId);
+    std::string topic = event.GetTopic();
+    TC_LOG_DEBUG("araxia.eventbus", "Publish event: {}", topic);
     
-    EventContext ctx;
-    ctx.MapId = mapId;
-    ctx.InstanceId = instanceId;
-    ctx.Type = type;
-    
-    std::ostringstream payload;
-    payload << "{\"guid\":" << guid
-            << ",\"entry\":" << entry
-            << ",\"x\":" << x
-            << ",\"y\":" << y
-            << ",\"z\":" << z << "}";
-    
-    Publish(topic, ctx, payload.str());
-}
-
-void AraxiaEventBus::PublishEncounterEvent(ContentType type, const std::string& eventType,
-                                           uint32 encounterId, uint32 mapId, uint32 instanceId,
-                                           const std::string& extraJson)
-{
-    std::string prefix = ContentTypeToPrefix(type);
-    std::string topic = prefix + ".encounter." + eventType;
-    
-    EventContext ctx;
-    ctx.MapId = mapId;
-    ctx.InstanceId = instanceId;
-    ctx.Type = type;
-    
-    std::ostringstream payload;
-    payload << "{\"encounter_id\":" << encounterId;
-    
-    // Merge extra JSON if provided
-    if (extraJson.length() > 2) // More than just "{}"
-    {
-        // Strip leading { from extraJson and append
-        payload << "," << extraJson.substr(1);
-    }
-    else
-    {
-        payload << "}";
-    }
-    
-    Publish(topic, ctx, payload.str());
-}
-
-void AraxiaEventBus::PublishPlayerEvent(const std::string& eventType, uint64 playerGuid,
-                                        const std::string& playerName, const EventContext& context)
-{
-    std::string prefix = ContentTypeToPrefix(context.Type);
-    std::string topic = prefix + ".player." + eventType;
-    
-    std::ostringstream payload;
-    payload << "{\"player_guid\":" << playerGuid
-            << ",\"player_name\":\"" << playerName << "\"}";
-    
-    Publish(topic, context, payload.str());
+    Publish(topic, event.GetContext(), event.GetPayload());
 }
 
 void AraxiaEventBus::Subscribe(const std::string& topicPrefix, EventHandler handler)

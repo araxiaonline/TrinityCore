@@ -17,7 +17,7 @@
 
 #include "Player.h"
 #include "AraxiaEventBus.h"
-#include "AraxiaEventBusConfig.h"
+#include "AraxiaEvents.h"
 #include "AreaTrigger.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
@@ -1589,28 +1589,29 @@ void Player::AddToWorld()
             m_items[i]->AddToWorld();
 
     // Araxia: Publish player login event to ZeroMQ event bus
-    if (sAraxiaEventBusConfig->IsPlayerEventsEnabled() && sAraxiaEventBus->IsInitialized())
-    {
-        uint32 mapId = GetMapId();
-        EventContext ctx;
-        ctx.MapId = mapId;
-        ctx.InstanceId = GetInstanceId();
-        ctx.Type = sAraxiaEventBus->GetContentTypeForMap(mapId);
-        sAraxiaEventBus->PublishPlayerEvent("login", GetGUID().GetCounter(), GetName(), ctx);
-    }
+    sAraxiaEventBus->Publish(PlayerEvent(
+        "login",
+        GetGUID().GetCounter(),
+        GetName(),
+        GetMapId(),
+        GetInstanceId(),
+        sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+    ));
 }
 
 void Player::RemoveFromWorld()
 {
     // Araxia: Publish player logout event to ZeroMQ event bus (before cleanup)
-    if (IsInWorld() && sAraxiaEventBusConfig->IsPlayerEventsEnabled() && sAraxiaEventBus->IsInitialized())
+    if (IsInWorld())
     {
-        uint32 mapId = GetMapId();
-        EventContext ctx;
-        ctx.MapId = mapId;
-        ctx.InstanceId = GetInstanceId();
-        ctx.Type = sAraxiaEventBus->GetContentTypeForMap(mapId);
-        sAraxiaEventBus->PublishPlayerEvent("logout", GetGUID().GetCounter(), GetName(), ctx);
+        sAraxiaEventBus->Publish(PlayerEvent(
+            "logout",
+            GetGUID().GetCounter(),
+            GetName(),
+            GetMapId(),
+            GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+        ));
     }
 
     // cleanup
@@ -2323,6 +2324,17 @@ void Player::GiveLevel(uint8 level)
     uint8 oldLevel = GetLevel();
     if (level == oldLevel)
         return;
+    
+    // Araxia: Publish level up event to ZeroMQ event bus
+    sAraxiaEventBus->Publish(LevelUpEvent(
+        GetGUID().GetCounter(),
+        GetName(),
+        oldLevel,
+        level,
+        GetMapId(),
+        GetInstanceId(),
+        sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+    ));
 
     if (Guild* guild = GetGuild())
         guild->UpdateMemberData(this, GUILD_MEMBER_DATA_LEVEL, level);
@@ -4505,16 +4517,9 @@ void Player::ResurrectPlayer(float restore_percent, bool applySickness)
 
 void Player::KillPlayer()
 {
-    // Araxia: Publish player death event to ZeroMQ event bus
-    if (sAraxiaEventBusConfig->IsPlayerEventsEnabled() && sAraxiaEventBus->IsInitialized())
-    {
-        uint32 mapId = GetMapId();
-        EventContext ctx;
-        ctx.MapId = mapId;
-        ctx.InstanceId = GetInstanceId();
-        ctx.Type = sAraxiaEventBus->GetContentTypeForMap(mapId);
-        sAraxiaEventBus->PublishPlayerEvent("death", GetGUID().GetCounter(), GetName(), ctx);
-    }
+    // NOTE: Player death events are published in Unit::Kill() which is the canonical
+    // death handler for all player deaths (combat, GM commands, environmental, etc.)
+    // Do NOT add death event publishing here to avoid duplicates.
 
     if (IsFlying() && !GetTransport())
         GetMotionMaster()->MoveFall();
@@ -7651,6 +7656,7 @@ void Player::UpdateZone(uint32 newZone, uint32 newArea)
         return;
 
     uint32 const oldZone = m_zoneUpdateId;
+    uint32 const oldArea = m_areaUpdateId;
     m_zoneUpdateId = newZone;
 
     GetMap()->UpdatePlayerZoneStats(oldZone, newZone);
@@ -7660,6 +7666,19 @@ void Player::UpdateZone(uint32 newZone, uint32 newArea)
     {
         sOutdoorPvPMgr->HandlePlayerLeaveZone(this, oldZone);
         sBattlefieldMgr->HandlePlayerLeaveZone(this, oldZone);
+        
+        // Araxia: Publish zone change event to ZeroMQ event bus
+        sAraxiaEventBus->Publish(ZoneChangeEvent(
+            GetGUID().GetCounter(),
+            GetName(),
+            newZone,
+            newArea,
+            oldZone,
+            oldArea,
+            GetMapId(),
+            GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+        ));
     }
 
     // group update
@@ -11746,6 +11765,18 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
     // only for full equip instead adding to stack
     UpdateCriteria(CriteriaType::EquipItem, pItem->GetEntry());
     UpdateCriteria(CriteriaType::EquipItemInSlot, slot, pItem->GetEntry());
+    
+    // Araxia: Publish item equip event to ZeroMQ event bus
+    sAraxiaEventBus->Publish(ItemEquipEvent(
+        true,  // isEquip
+        GetGUID().GetCounter(),
+        GetName(),
+        pItem->GetEntry(),
+        slot,
+        GetMapId(),
+        GetInstanceId(),
+        sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+    ));
 
     UpdateAverageItemLevelEquipped();
 
@@ -14619,6 +14650,17 @@ bool Player::CanRewardQuest(Quest const* quest, bool msg) const
 void Player::AddQuestAndCheckCompletion(Quest const* quest, Object* questGiver)
 {
     AddQuest(quest, questGiver);
+    
+    // Araxia: Publish quest accept event to ZeroMQ event bus
+    sAraxiaEventBus->Publish(QuestEvent(
+        "accept",
+        GetGUID().GetCounter(),
+        GetName(),
+        quest->GetQuestId(),
+        GetMapId(),
+        GetInstanceId(),
+        sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+    ));
 
     if (CanCompleteQuest(quest->GetQuestId()))
         CompleteQuest(quest->GetQuestId());
@@ -15006,6 +15048,17 @@ void Player::RewardQuest(Quest const* quest, LootItemType rewardType, uint32 rew
     SetCanDelayTeleport(true);
 
     uint32 quest_id = quest->GetQuestId();
+    
+    // Araxia: Publish quest complete event to ZeroMQ event bus
+    sAraxiaEventBus->Publish(QuestEvent(
+        "complete",
+        GetGUID().GetCounter(),
+        GetName(),
+        quest_id,
+        GetMapId(),
+        GetInstanceId(),
+        sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+    ));
     QuestStatus oldStatus = GetQuestStatus(quest_id);
 
     if (quest->IsDaily() || quest->IsDFQuest())
@@ -15349,6 +15402,17 @@ void Player::FailQuestsWithFlag(QuestFlags flag)
 
 void Player::AbandonQuest(uint32 questId)
 {
+    // Araxia: Publish quest abandon event to ZeroMQ event bus
+    sAraxiaEventBus->Publish(QuestEvent(
+        "abandon",
+        GetGUID().GetCounter(),
+        GetName(),
+        questId,
+        GetMapId(),
+        GetInstanceId(),
+        sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+    ));
+    
     if (Quest const* quest = sObjectMgr->GetQuestTemplate(questId))
     {
         // Destroy quest items on quest abandon.
@@ -26544,6 +26608,16 @@ void Player::AtEnterCombat()
     Unit::AtEnterCombat();
     if (GetCombatManager().HasPvPCombat())
         EnablePvpRules(true);
+    
+    // Araxia: Publish combat enter event to ZeroMQ event bus
+    sAraxiaEventBus->Publish(CombatEvent(
+        true, // isEntering
+        GetGUID().GetCounter(),
+        GetName(),
+        GetMapId(),
+        GetInstanceId(),
+        sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+    ));
 }
 
 void Player::AtExitCombat()
@@ -26551,6 +26625,16 @@ void Player::AtExitCombat()
     Unit::AtExitCombat();
     UpdatePotionCooldown();
     m_regenInterruptTimestamp = GameTime::Now();
+    
+    // Araxia: Publish combat leave event to ZeroMQ event bus
+    sAraxiaEventBus->Publish(CombatEvent(
+        false, // isEntering = false means leaving combat
+        GetGUID().GetCounter(),
+        GetName(),
+        GetMapId(),
+        GetInstanceId(),
+        sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+    ));
 }
 
 float Player::GetBlockPercent(uint8 attackerLevel) const
@@ -26928,6 +27012,24 @@ void Player::StoreLootItem(ObjectGuid lootWorldObjectGuid, uint8 lootSlot, Loot*
                 ApplyItemLootedSpell(newitem, true);
             else
                 ApplyItemLootedSpell(sObjectMgr->GetItemTemplate(item->itemid));
+
+            // Araxia: Publish loot event to ZeroMQ event bus
+            // We get the source entry from the loot owner (creature/gameobject)
+            uint32 sourceEntry = 0;
+            if (loot->GetOwnerGUID().IsCreatureOrVehicle())
+                if (Creature* creature = GetMap()->GetCreature(loot->GetOwnerGUID()))
+                    sourceEntry = creature->GetEntry();
+            
+            sAraxiaEventBus->Publish(LootEvent(
+                GetGUID().GetCounter(),
+                GetName(),
+                item->itemid,
+                item->count,
+                sourceEntry,
+                GetMapId(),
+                GetInstanceId(),
+                sAraxiaEventBus->GetContentTypeForMap(GetMapId())
+            ));
 
             break;
         }

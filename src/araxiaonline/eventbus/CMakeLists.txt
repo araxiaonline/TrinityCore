@@ -16,6 +16,8 @@ set(EVENTBUS_SOURCES
   AraxiaEventBus.h
   AraxiaEventBusConfig.cpp
   AraxiaEventBusConfig.h
+  AraxiaEvents.cpp
+  AraxiaEvents.h
 )
 
 add_library(araxia-eventbus STATIC
