@@ -31,6 +31,7 @@
 #    NETWORK CONFIG
 #    CONSOLE AND REMOTE ACCESS
 #    CHARACTER DELETE OPTIONS
+#    ARAXIA EVENT BUS (ZEROMQ)
 #    CUSTOM SERVER OPTIONS
 #    AUCTION HOUSE BOT SETTINGS
 #    AUCTION HOUSE BOT ITEM FINE TUNING
@@ -3287,6 +3288,51 @@ CharDelete.DemonHunter.MinLevel = 0
 #                     0  - (Disabled, Don't delete any characters)
 
 CharDelete.KeepDays = 30
+
+#
+###################################################################################################
+
+###################################################################################################
+# ARAXIA EVENT BUS (ZEROMQ)
+#
+#    Araxia.EventBus.PublishEndpoint
+#        Description: ZeroMQ endpoint for publishing events.
+#                     Format: "tcp://*:port" for binding, "tcp://host:port" for connecting.
+#        Default:     "tcp://*:5555"
+
+Araxia.EventBus.PublishEndpoint = "tcp://*:5555"
+
+#
+#    Araxia.EventBus.SubscribeEndpoint
+#        Description: ZeroMQ endpoint for subscribing to events (from authserver, API, etc).
+#                     Format: "tcp://host:port" for connecting.
+#        Default:     "tcp://127.0.0.1:5556"
+
+Araxia.EventBus.SubscribeEndpoint = "tcp://127.0.0.1:5556"
+
+#
+#    Araxia.EventBus.EnableSpawnEvents
+#        Description: Publish creature spawn/despawn events.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+Araxia.EventBus.EnableSpawnEvents = 1
+
+#
+#    Araxia.EventBus.EnableEncounterEvents
+#        Description: Publish encounter events (start, end, wipe, spell casts).
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+Araxia.EventBus.EnableEncounterEvents = 1
+
+#
+#    Araxia.EventBus.EnablePlayerEvents
+#        Description: Publish player events (login, logout, death).
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+Araxia.EventBus.EnablePlayerEvents = 1
 
 #
 ###################################################################################################
