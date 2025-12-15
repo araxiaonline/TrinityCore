@@ -989,6 +989,39 @@ void AuctionHouseObject::AddAuction(CharacterDatabaseTransaction trans, AuctionP
     bucket->Auctions.insert(std::ranges::lower_bound(bucket->Auctions, addedAuction, std::cref(insertSorter)), addedAuction);
 
     sScriptMgr->OnAuctionAdd(this, addedAuction);
+    
+    // Araxia: Publish auction create event to ZeroMQ event bus
+    // Only publish for player-created auctions (trans != nullptr), not during server load
+    if (trans)
+    {
+        std::string ownerName;
+        Player* owner = ObjectAccessor::FindConnectedPlayer(addedAuction->Owner);
+        if (owner)
+            ownerName = owner->GetName();
+        else if (CharacterCacheEntry const* entry = sCharacterCache->GetCharacterCacheByGuid(addedAuction->Owner))
+            ownerName = entry->Name;
+        
+        uint32 itemEntry = 0;
+        uint32 itemCount = 0;
+        if (!addedAuction->Items.empty())
+        {
+            itemEntry = addedAuction->Items[0]->GetEntry();
+            for (Item const* item : addedAuction->Items)
+                itemCount += item->GetCount();
+        }
+        
+        sAraxiaEventBus->Publish(AuctionEvent(
+            "create",
+            addedAuction->Owner.GetCounter(),
+            ownerName,
+            addedAuction->Id,
+            itemEntry,
+            itemCount,
+            addedAuction->BuyoutOrUnitPrice ? addedAuction->BuyoutOrUnitPrice : addedAuction->MinBid,
+            0, 0,
+            ContentType::World
+        ));
+    }
 }
 
 std::map<uint32, AuctionPosting>::node_type AuctionHouseObject::RemoveAuction(CharacterDatabaseTransaction trans, AuctionPosting* auction,
