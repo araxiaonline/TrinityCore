@@ -184,6 +184,10 @@ void AraxiaEventBus::PublishSpawnEvent(ContentType type, bool isCreate, uint64 g
     std::string prefix = ContentTypeToPrefix(type);
     std::string topic = prefix + ".spawn." + (isCreate ? "create" : "delete");
     
+    // Debug: Log spawn events to verify they're being called
+    TC_LOG_DEBUG("araxia.eventbus", "PublishSpawnEvent: {} entry={} guid={} map={}", 
+                 topic, entry, guid, mapId);
+    
     EventContext ctx;
     ctx.MapId = mapId;
     ctx.InstanceId = instanceId;
@@ -300,6 +304,7 @@ void AraxiaEventBus::WorkerThread()
                     std::string fullMsg = msg.first + " " + msg.second;
                     zmq::message_t zmqMsg(fullMsg.data(), fullMsg.size());
                     _publisher->send(zmqMsg, zmq::send_flags::none);
+                    TC_LOG_DEBUG("araxia.eventbus", "Published: {} ({} bytes)", msg.first, fullMsg.size());
                 }
                 catch (const zmq::error_t& e)
                 {
