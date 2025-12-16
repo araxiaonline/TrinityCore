@@ -60,9 +60,9 @@ ENV LC_ALL=en_US.UTF-8
 RUN update-alternatives --install /usr/bin/cc cc /usr/bin/clang 100 && \
     update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++ 100
 
-# Create trinitycore user with sudo privileges
+# Create trinitycore user with sudo privileges (requires password)
 RUN useradd -m -s /bin/bash -G sudo trinitycore && \
-    echo "trinitycore ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    echo "trinitycore ALL=(ALL) ALL" >> /etc/sudoers
 
 # Create necessary directories
 RUN mkdir -p \

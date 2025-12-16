@@ -111,3 +111,6 @@ Monitor events with: `python /opt/trinitycore/TrinityCore/src/araxiaonline/tools
 - Always use the max number of threads when building the server
 - Always use @araxiaonline/cmake_setup.sh to setup the build environment. Modify it if needed.
 - Please fix all compile warnings before marking a task as complete.
+
+### Pushing changes
+- Our working branch is `araxia-main` and all branches and PRs should be based on this branch.
