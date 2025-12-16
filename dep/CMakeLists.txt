@@ -33,6 +33,7 @@ if(SERVERS)
   add_subdirectory(rapidjson)
   add_subdirectory(efsw)
   add_subdirectory(protobuf)
+  add_subdirectory(zeromq)
 endif()
 
 if(TOOLS)

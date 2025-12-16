@@ -42,8 +42,11 @@ local AMS_MSG_MAX_ID = 65535  -- 16-bit ID
 -- Dependencies
 -- ============================================================================
 
--- Smallfolk for serialization (already in AIO deps)
-local Smallfolk = require("AIO_Server.Dep_Smallfolk.smallfolk")
+-- Smallfolk for serialization (vendored in AMS_Server directory)
+local Smallfolk = require("AMS_Server.smallfolk")
+
+-- Chat channel constants for clarity
+local CHAT_CHANNEL_WHISPER = 7  -- CHAT_MSG_WHISPER
 
 -- ============================================================================
 -- Core AMS Table
@@ -120,7 +123,7 @@ local function SendAddonMessage(player, message)
     if #message <= AMS_MAX_MSG_LENGTH then
         -- Prefix with marker for short message (ID = 0000, parts = 0000, partID = 0000)
         local packet = NumberToHex(0) .. NumberToHex(0) .. NumberToHex(0) .. message
-        player:SendAddonMessage(AMS_PREFIX, packet, 7, player)
+        player:SendAddonMessage(AMS_PREFIX, packet, CHAT_CHANNEL_WHISPER, player)
         return
     end
     
@@ -142,7 +145,7 @@ local function SendAddonMessage(player, message)
                       NumberToHex(partID)
         
         local packet = header .. chunk
-        player:SendAddonMessage(AMS_PREFIX, packet, 7, player)
+        player:SendAddonMessage(AMS_PREFIX, packet, CHAT_CHANNEL_WHISPER, player)
     end
 end
 

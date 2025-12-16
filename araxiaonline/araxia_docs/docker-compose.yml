@@ -6,10 +6,10 @@ services:
     image: mysql:8.0
     container_name: trinitycore-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-trinity}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Please set MYSQL_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: ${MYSQL_AUTH_DATABASE:-auth}
       MYSQL_USER: ${MYSQL_USER:-trinity}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-trinity}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Please set MYSQL_PASSWORD in .env}
     volumes:
       - mysql-data:/var/lib/mysql
       - ./sql:/docker-entrypoint-initdb.d:ro
@@ -19,7 +19,7 @@ services:
       - trinitycore
     command: --default-authentication-plugin=mysql_native_password --max_allowed_packet=512M
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-trinity}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 5

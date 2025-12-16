@@ -17,10 +17,13 @@
 
 #include "ScriptMgr.h"
 #include "AuctionHouseBot.h"
+#include "AuctionHouseMgr.h"
 #include "Chat.h"
 #include "ChatCommand.h"
+#include "Item.h"
 #include "Language.h"
 #include "RBAC.h"
+#include <map>
 
 using namespace Trinity::ChatCommands;
 
@@ -69,6 +72,7 @@ public:
             { "rebuild",    HandleAHBotRebuildCommand,  rbac::RBAC_PERM_COMMAND_AHBOT_REBUILD,  Console::Yes },
             { "reload",     HandleAHBotReloadCommand,   rbac::RBAC_PERM_COMMAND_AHBOT_RELOAD,   Console::Yes },
             { "status",     HandleAHBotStatusCommand,   rbac::RBAC_PERM_COMMAND_AHBOT_STATUS,   Console::Yes },
+            { "stats",      HandleAHBotStatsCommand,    rbac::RBAC_PERM_COMMAND_AHBOT_STATUS,   Console::Yes },
         };
 
         static ChatCommandTable commandTable =
@@ -184,6 +188,105 @@ public:
 
         if (!session)
             handler->SendSysMessage(LANG_AHBOT_STATUS_BAR_CONSOLE);
+
+        return true;
+    }
+
+    // AHBot Stats Command - Reports item level distribution for auction house items
+    // This is useful for analyzing the effectiveness of item level scaling
+    // Usage: .ahbot stats [equipment] - shows item level distribution
+    //        equipment flag filters to only weapons/armor
+    static bool HandleAHBotStatsCommand(ChatHandler* handler, Optional<EXACT_SEQUENCE("equipment")> equipmentOnly)
+    {
+        // Item level buckets for distribution analysis
+        std::map<uint32, uint32> itemLevelBuckets;  // bucket -> count
+        uint32 totalItems = 0;
+        uint32 equipmentItems = 0;
+        uint32 minItemLevel = UINT32_MAX;
+        uint32 maxItemLevel = 0;
+        uint64 totalItemLevel = 0;
+
+        // Iterate through all three auction houses
+        // AuctionHouseIds: 1=Alliance, 2=Neutral (Goblin), 6=Horde, 7=Neutral (Blackwater)
+        std::vector<uint32> auctionHouseIds = { 1, 2, 6, 7 };
+
+        for (uint32 ahId : auctionHouseIds)
+        {
+            AuctionHouseObject* auctionHouse = sAuctionMgr->GetAuctionsById(ahId);
+            if (!auctionHouse)
+                continue;
+
+            for (auto itr = auctionHouse->GetAuctionsBegin(); itr != auctionHouse->GetAuctionsEnd(); ++itr)
+            {
+                AuctionPosting& auction = itr->second;
+                for (Item* item : auction.Items)
+                {
+                    if (!item)
+                        continue;
+
+                    ItemTemplate const* proto = item->GetTemplate();
+                    if (!proto)
+                        continue;
+
+                    bool isEquipment = (proto->GetClass() == ITEM_CLASS_WEAPON || proto->GetClass() == ITEM_CLASS_ARMOR);
+
+                    // Skip non-equipment if filter is active
+                    if (equipmentOnly.has_value() && !isEquipment)
+                        continue;
+
+                    if (isEquipment)
+                        ++equipmentItems;
+
+                    // Get item level from bonus data (includes any scaling bonuses)
+                    // Use static GetItemLevel with minimal parameters since AHBot items have no owner
+                    uint32 itemLevel = Item::GetItemLevel(proto, *item->GetBonus(), 90, 0, 0, 0, 0, false, 0);
+
+                    ++totalItems;
+                    totalItemLevel += itemLevel;
+
+                    if (itemLevel < minItemLevel)
+                        minItemLevel = itemLevel;
+                    if (itemLevel > maxItemLevel)
+                        maxItemLevel = itemLevel;
+
+                    // Bucket by 50 item levels for readable output
+                    uint32 bucket = (itemLevel / 50) * 50;
+                    itemLevelBuckets[bucket]++;
+                }
+            }
+        }
+
+        if (totalItems == 0)
+        {
+            handler->SendSysMessage("AHBot Stats: No items found in auction house.");
+            return true;
+        }
+
+        // Output results
+        handler->PSendSysMessage("=== AHBot Item Level Statistics ===");
+        handler->PSendSysMessage("Total items analyzed: %u", totalItems);
+        if (!equipmentOnly.has_value())
+            handler->PSendSysMessage("Equipment items (weapons/armor): %u", equipmentItems);
+        handler->PSendSysMessage("Item level range: %u - %u", minItemLevel, maxItemLevel);
+        handler->PSendSysMessage("Average item level: %.1f", static_cast<float>(totalItemLevel) / totalItems);
+        handler->SendSysMessage("--- Distribution by Item Level ---");
+
+        for (auto const& [bucket, count] : itemLevelBuckets)
+        {
+            float percentage = (static_cast<float>(count) / totalItems) * 100.0f;
+            handler->PSendSysMessage("  ilvl %u-%u: %u items (%.1f%%)", bucket, bucket + 49, count, percentage);
+        }
+
+        // Show scaling config status
+        handler->SendSysMessage("--- Scaling Configuration ---");
+        handler->PSendSysMessage("Scaling Enabled: %s", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_ENABLED) ? "Yes" : "No");
+        if (sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_ENABLED))
+        {
+            handler->PSendSysMessage("  Min Target ilvl: %u", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_MIN_ITEM_LEVEL));
+            handler->PSendSysMessage("  Max Target ilvl: %u", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_MAX_ITEM_LEVEL));
+            handler->PSendSysMessage("  Scaling Chance: %u%%", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_CHANCE));
+            handler->PSendSysMessage("  Equipment Only: %s", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_EQUIPMENT_ONLY) ? "Yes" : "No");
+        }
 
         return true;
     }

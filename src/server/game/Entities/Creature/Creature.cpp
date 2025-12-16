@@ -16,6 +16,7 @@
  */
 
 #include "Creature.h"
+#include "AraxiaEventBus.h"
 #include "BattlegroundMgr.h"
 #include "CellImpl.h"
 #include "CharmInfo.h"
@@ -359,6 +360,19 @@ void Creature::AddToWorld()
 
         if (GetZoneScript())
             GetZoneScript()->OnCreatureCreate(this);
+
+        // Araxia: Publish spawn event to ZeroMQ event bus
+        sAraxiaEventBus->Publish(SpawnEvent(
+            true, // isCreate
+            GetGUID().GetCounter(),
+            GetEntry(),
+            GetMapId(),
+            GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(GetMapId()),
+            GetPositionX(),
+            GetPositionY(),
+            GetPositionZ()
+        ));
     }
 }
 
@@ -366,6 +380,19 @@ void Creature::RemoveFromWorld()
 {
     if (IsInWorld())
     {
+        // Araxia: Publish despawn event to ZeroMQ event bus (before removal)
+        sAraxiaEventBus->Publish(SpawnEvent(
+            false, // isCreate = false means delete/despawn
+            GetGUID().GetCounter(),
+            GetEntry(),
+            GetMapId(),
+            GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(GetMapId()),
+            GetPositionX(),
+            GetPositionY(),
+            GetPositionZ()
+        ));
+
         if (GetZoneScript())
             GetZoneScript()->OnCreatureRemove(this);
 
