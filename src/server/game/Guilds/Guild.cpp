@@ -17,6 +17,8 @@
 
 #include "Guild.h"
 #include "AccountMgr.h"
+#include "AraxiaEventBus.h"
+#include "AraxiaEvents.h"
 #include "AchievementMgr.h"
 #include "Bag.h"
 #include "CalendarMgr.h"
@@ -2951,6 +2953,22 @@ bool Guild::AddMember(CharacterDatabaseTransaction trans, ObjectGuid guid, Optio
 
     // Call scripts if member was succesfully added (and stored to database)
     sScriptMgr->OnGuildAddMember(this, player, AsUnderlyingType(*rankId));
+    
+    // Araxia: Publish guild join event to ZeroMQ event bus
+    if (player)
+    {
+        sAraxiaEventBus->Publish(GuildEvent(
+            "join",
+            player->GetGUID().GetCounter(),
+            player->GetName(),
+            GetId(),
+            GetName(),
+            AsUnderlyingType(*rankId),
+            player->GetMapId(),
+            player->GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(player->GetMapId())
+        ));
+    }
 
     return true;
 }
@@ -2988,6 +3006,23 @@ bool Guild::DeleteMember(CharacterDatabaseTransaction trans, ObjectGuid guid, bo
     }
     // Call script on remove before member is actually removed from guild (and database)
     sScriptMgr->OnGuildRemoveMember(this, guid, isDisbanding, isKicked);
+    
+    // Araxia: Publish guild leave event to ZeroMQ event bus (before member is erased)
+    Player* leavingPlayer = ObjectAccessor::FindConnectedPlayer(guid);
+    if (leavingPlayer)
+    {
+        sAraxiaEventBus->Publish(GuildEvent(
+            "leave",
+            leavingPlayer->GetGUID().GetCounter(),
+            leavingPlayer->GetName(),
+            GetId(),
+            GetName(),
+            0,  // rank not relevant for leave
+            leavingPlayer->GetMapId(),
+            leavingPlayer->GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(leavingPlayer->GetMapId())
+        ));
+    }
 
     m_members.erase(guid);
 

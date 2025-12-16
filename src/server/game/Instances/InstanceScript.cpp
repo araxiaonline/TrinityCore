@@ -16,6 +16,8 @@
  */
 
 #include "InstanceScript.h"
+#include "AraxiaEventBus.h"
+#include "AraxiaEvents.h"
 #include "AreaBoundary.h"
 #include "Creature.h"
 #include "CreatureAI.h"
@@ -416,6 +418,15 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     {
                         player->AtStartOfEncounter(EncounterType::DungeonEncounter);
                     });
+                    
+                    // Araxia: Publish encounter start event to ZeroMQ event bus
+                    sAraxiaEventBus->Publish(EncounterEvent(
+                        "start",
+                        id,
+                        instance->GetId(),
+                        instance->GetInstanceId(),
+                        sAraxiaEventBus->GetContentTypeForMap(instance->GetId())
+                    ));
                     break;
                 }
                 case FAIL:
@@ -427,6 +438,15 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     {
                         player->AtEndOfEncounter(EncounterType::DungeonEncounter);
                     });
+                    
+                    // Araxia: Publish encounter wipe event to ZeroMQ event bus
+                    sAraxiaEventBus->Publish(EncounterEvent(
+                        "wipe",
+                        id,
+                        instance->GetId(),
+                        instance->GetInstanceId(),
+                        sAraxiaEventBus->GetContentTypeForMap(instance->GetId())
+                    ));
                     break;
                 }
                 case DONE:
@@ -454,6 +474,15 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                     {
                         player->AtEndOfEncounter(EncounterType::DungeonEncounter);
                     });
+                    
+                    // Araxia: Publish encounter end (kill) event to ZeroMQ event bus
+                    sAraxiaEventBus->Publish(EncounterEvent(
+                        "end",
+                        id,
+                        instance->GetId(),
+                        instance->GetInstanceId(),
+                        sAraxiaEventBus->GetContentTypeForMap(instance->GetId())
+                    ));
                     break;
                 }
                 default:

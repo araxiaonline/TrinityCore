@@ -1,0 +1,168 @@
+################################################################################
+#
+#                    ARAXIA ONLINE CONFIGURATION
+#
+################################################################################
+#
+#    This configuration file contains all Araxia-specific settings.
+#    It is loaded AFTER worldserver.conf, so settings here can override
+#    worldserver.conf values if needed.
+#
+#    Place this file in the worldserver.conf.d/ directory (or etc/ folder)
+#    to have it automatically loaded by the worldserver.
+#
+################################################################################
+
+###############################################################################
+#
+#  ARAXIA EVENT BUS (ZEROMQ)
+#
+#    Araxia.EventBus.PublishEndpoint
+#        ZeroMQ endpoint for publishing server events.
+#        External subscribers connect to this endpoint to receive events.
+#        Default: "tcp://*:5555"
+#
+#    Araxia.EventBus.SubscribeEndpoint
+#        ZeroMQ endpoint for receiving external commands.
+#        The server connects to this endpoint to receive commands.
+#        Default: "tcp://127.0.0.1:5556"
+#
+#    Araxia.EventBus.EnableSpawnEvents
+#        Enable publishing of creature spawn/despawn events.
+#        Topics: world.spawn.*, dungeon.spawn.*, raid.spawn.*, bg.spawn.*
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableEncounterEvents
+#        Enable publishing of encounter events (boss fights).
+#        Topics: *.encounter.start, *.encounter.end, *.encounter.spell_cast
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnablePlayerEvents
+#        Enable publishing of player events (login, logout, death).
+#        Topics: *.player.login, *.player.logout, *.player.death
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableCombatEvents
+#        Enable publishing of combat events (enter, leave).
+#        Topics: *.combat.enter, *.combat.leave
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableLootEvents
+#        Enable publishing of loot events (item looted).
+#        Topics: *.loot.item
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableQuestEvents
+#        Enable publishing of quest events (accept, complete, abandon).
+#        Topics: *.quest.accept, *.quest.complete, *.quest.abandon
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableZoneEvents
+#        Enable publishing of zone change events.
+#        Topics: *.zone.change
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnablePartyEvents
+#        Enable publishing of party/group events (join, leave, disband).
+#        Topics: *.party.join, *.party.leave, *.party.disband, *.party.leader_change
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableItemEvents
+#        Enable publishing of item equip/unequip events.
+#        Topics: *.item.equip, *.item.unequip
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableSpellEvents
+#        Enable publishing of spell cast events.
+#        WARNING: Very high volume! Only enable if needed.
+#        Topics: *.spell.cast
+#        Default: 0 (disabled)
+#
+#    Araxia.EventBus.EnableLevelEvents
+#        Enable publishing of level up events.
+#        Topics: *.player.levelup
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableChatEvents
+#        Enable publishing of chat events.
+#        Topics: *.chat.say, *.chat.yell, *.chat.whisper, *.chat.party, *.chat.guild, *.chat.raid
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableAchievementEvents
+#        Enable publishing of achievement events.
+#        Topics: *.achievement.earned
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableAuctionEvents
+#        Enable publishing of auction house events.
+#        Topics: *.auction.create, *.auction.bid, *.auction.buyout, *.auction.expire, *.auction.cancel
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableMailEvents
+#        Enable publishing of mail events.
+#        Topics: *.mail.send, *.mail.receive
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableTradeEvents
+#        Enable publishing of trade events.
+#        Topics: *.trade.complete
+#        Default: 1 (enabled)
+#
+#    Araxia.EventBus.EnableGuildEvents
+#        Enable publishing of guild events.
+#        Topics: *.guild.join, *.guild.leave, *.guild.promote, *.guild.demote, *.guild.create, *.guild.disband
+#        Default: 1 (enabled)
+#
+###############################################################################
+
+Araxia.EventBus.PublishEndpoint = "tcp://*:5555"
+Araxia.EventBus.SubscribeEndpoint = "tcp://127.0.0.1:5556"
+Araxia.EventBus.EnableSpawnEvents = 1
+Araxia.EventBus.EnableEncounterEvents = 1
+Araxia.EventBus.EnablePlayerEvents = 1
+Araxia.EventBus.EnableCombatEvents = 1
+Araxia.EventBus.EnableLootEvents = 1
+Araxia.EventBus.EnableQuestEvents = 1
+Araxia.EventBus.EnableZoneEvents = 1
+Araxia.EventBus.EnablePartyEvents = 1
+Araxia.EventBus.EnableItemEvents = 1
+Araxia.EventBus.EnableSpellEvents = 0
+Araxia.EventBus.EnableLevelEvents = 1
+Araxia.EventBus.EnableChatEvents = 1
+Araxia.EventBus.EnableAchievementEvents = 1
+Araxia.EventBus.EnableAuctionEvents = 1
+Araxia.EventBus.EnableMailEvents = 1
+Araxia.EventBus.EnableTradeEvents = 1
+Araxia.EventBus.EnableGuildEvents = 1
+
+###############################################################################
+#
+#  ARAXIA MCP SERVER
+#
+#    Araxia.MCP.Enable
+#        Enable the Model Context Protocol (MCP) server for AI integration.
+#        Default: 1 (enabled)
+#
+#    Araxia.MCP.StdioMode
+#        Run MCP server in stdio mode (for direct process communication).
+#        When disabled, uses HTTP transport.
+#        Default: 1 (stdio mode)
+#
+###############################################################################
+
+Araxia.MCP.Enable = 1
+Araxia.MCP.StdioMode = 1
+
+###############################################################################
+#
+#  ARAXIA ELUNA EXTENSIONS
+#
+#    Araxia.Eluna.EnableSharedData
+#        Enable ElunaSharedData for Lua<->C++ communication bridge.
+#        Used by AMS (Addon Messaging System) and ZMQ bridge.
+#        Default: 1 (enabled)
+#
+###############################################################################
+
+Araxia.Eluna.EnableSharedData = 1
+

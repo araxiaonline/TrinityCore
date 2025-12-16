@@ -3,6 +3,8 @@
  */
 
 #include "AraxiaMCPServer.h"
+#include "AraxiaCore.h"
+#include "MCPPlayerManager.h"
 #include "Config.h"
 #include "Log.h"
 #include "World.h"
@@ -28,14 +30,18 @@ MCPServer::MCPServer() : _impl(std::make_unique<Impl>())
 MCPServer::~MCPServer()
 {
     // Note: During static destruction, other singletons may already be destroyed.
-    // We need to be careful not to access them.
-    try
+    // Shutdown() should have been called from World::~World() already.
+    // Just ensure the thread is properly cleaned up.
+    if (_serverThread)
     {
-        Shutdown();
-    }
-    catch (...)
-    {
-        // Swallow any exceptions during destruction
+        if (_serverThread->joinable())
+        {
+            // Thread still running - try to stop it
+            if (_impl)
+                _impl->server.stop();
+            _serverThread->join();
+        }
+        _serverThread.reset();
     }
 }
 
@@ -71,6 +77,14 @@ bool MCPServer::Initialize()
     RegisterDatabaseTools();
     RegisterWorldScanTools();  // LIDAR-style spatial awareness
     RegisterSpawnTools();      // Headless spawn management
+    
+    // Initialize AraxiaCore (provides World::Update hook for all Araxia systems)
+    sAraxiaCore->Initialize();
+    
+    // Initialize and register MCP Player tools
+    sMCPPlayerMgr->Initialize();
+    RegisterMCPPlayerTools();  // AI player session management
+    
     // RegisterElunaTools();  // Phase 3
     // RegisterWorldTools();  // Phase 4
     
@@ -118,7 +132,7 @@ bool MCPServer::Initialize()
     // Start server thread
     _serverThread = std::make_unique<std::thread>(&MCPServer::ServerThread, this);
     
-    TC_LOG_INFO("araxia.mcp", "[MCP] Araxia MCP Server starting on port %u (remote: %s)", 
+    TC_LOG_INFO("araxia.mcp", "[MCP] Araxia MCP Server starting on port {} (remote: {})", 
                 _port, _allowRemote ? "allowed" : "localhost only");
     
     return true;
@@ -133,6 +147,12 @@ void MCPServer::Shutdown()
     // Prevent double shutdown
     if (_shutdownRequested.exchange(true))
         return;
+    
+    // Shutdown MCPPlayerManager first (logs out all AI players)
+    sMCPPlayerMgr->Shutdown();
+    
+    // Shutdown AraxiaCore
+    sAraxiaCore->Shutdown();
     
     // Stop the HTTP server first (this will cause listen() to return)
     // httplib::Server::stop() is thread-safe
@@ -157,12 +177,12 @@ void MCPServer::ServerThread()
     
     _running = true;
     
-    TC_LOG_INFO("araxia.mcp", "[MCP] Server listening on %s:%u", bindAddr.c_str(), _port);
+    TC_LOG_INFO("araxia.mcp", "[MCP] Server listening on {}:{}", bindAddr, _port);
     
     if (!_impl->server.listen(bindAddr.c_str(), _port))
     {
         if (!_shutdownRequested)
-            TC_LOG_ERROR("araxia.mcp", "[MCP] Failed to start server on %s:%u", bindAddr.c_str(), _port);
+            TC_LOG_ERROR("araxia.mcp", "[MCP] Failed to start server on {}:{}", bindAddr, _port);
     }
     
     _running = false;
@@ -191,7 +211,7 @@ void MCPServer::RegisterTool(const std::string& name, const std::string& descrip
 {
     std::lock_guard<std::mutex> lock(_toolsMutex);
     _tools[name] = MCPToolInfo{name, description, inputSchema, handler};
-    TC_LOG_DEBUG("araxia.mcp", "[MCP] Registered tool: %s", name.c_str());
+    TC_LOG_DEBUG("araxia.mcp", "[MCP] Registered tool: {}", name);
 }
 
 void MCPServer::UnregisterTool(const std::string& name)

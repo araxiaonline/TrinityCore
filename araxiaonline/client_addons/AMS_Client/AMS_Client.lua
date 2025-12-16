@@ -119,7 +119,7 @@ local function SendAddonMessage(message)
     if #message <= AMS_MAX_MSG_LENGTH then
         -- Prefix with marker for short message (ID = 0000, parts = 0000, partID = 0000)
         local packet = NumberToHex(0) .. NumberToHex(0) .. NumberToHex(0) .. message
-        -- Use PARTY channel for solo players, fallback to WHISPER if in party
+        -- Use WHISPER channel for solo players, PARTY if in a group
         local channel = IsInGroup() and "PARTY" or "WHISPER"
         local target = channel == "WHISPER" and UnitName("player") or nil
         Debug("Sending via channel:", channel, "target:", target or "none", "prefix:", AMS_PREFIX)
@@ -134,7 +134,7 @@ local function SendAddonMessage(message)
     
     Debug("Splitting message ID", msgID, "into", totalParts, "parts")
     
-    -- Use PARTY channel for solo players, fallback to WHISPER if in party
+    -- Use WHISPER channel for solo players, PARTY if in a group
     local channel = IsInGroup() and "PARTY" or "WHISPER"
     local target = channel == "WHISPER" and UnitName("player") or nil
     

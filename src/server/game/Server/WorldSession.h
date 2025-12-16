@@ -1016,6 +1016,9 @@ class TC_GAME_API WorldSession
         void SetSecurity(AccountTypes security) { _security = security; }
         std::string const& GetRemoteAddress() const { return m_Address; }
         void SetPlayer(Player* player);
+        
+        // Packet capture for headless sessions (MCP bots)
+        void SetPacketCaptureCallback(std::function<void(WorldPacket const&)> callback) { _packetCaptureCallback = std::move(callback); }
         uint8 GetAccountExpansion() const { return m_accountExpansion; }
         uint8 GetExpansion() const { return m_expansion; }
         std::string const& GetOS() const { return _os; }
@@ -2014,6 +2017,9 @@ class TC_GAME_API WorldSession
         rbac::RBACData* _RBACData;
         uint32 expireTime;
         bool forceExit;
+
+        // Packet capture for headless sessions (MCP bots)
+        std::function<void(WorldPacket const&)> _packetCaptureCallback;
 
         std::unique_ptr<boost::circular_buffer<std::pair<int64, uint32>>> _timeSyncClockDeltaQueue; // first member: clockDelta. Second member: latency of the packet exchange that was used to compute that clockDelta.
         int64 _timeSyncClockDelta;

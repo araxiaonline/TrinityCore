@@ -74,7 +74,13 @@ RUN apt-get update && apt-get install -y \
     libbz2-1.0 \
     libreadline8t64 \
     libncurses6 \
-    libboost-all-dev \
+    libboost-system1.83.0 \
+    libboost-filesystem1.83.0 \
+    libboost-thread1.83.0 \
+    libboost-program-options1.83.0 \
+    libboost-iostreams1.83.0 \
+    libboost-regex1.83.0 \
+    libboost-locale1.83.0 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

@@ -401,7 +401,7 @@ void RegisterWorldScanTools()
                         }
                     }
                     
-                    TC_LOG_INFO("araxia.mcp", "[MCP] Ground height batch: %d found (%d from DB), %d not found", 
+                    TC_LOG_INFO("araxia.mcp", "[MCP] Ground height batch: {} found ({} from DB), {} not found", 
                                 found, dbUsed, notFound);
                     
                     return {
@@ -423,7 +423,7 @@ void RegisterWorldScanTools()
                     
                     if (z != 0.0f)
                     {
-                        TC_LOG_INFO("araxia.mcp", "[MCP] Ground height at (%.2f, %.2f) on map %u = %.2f (source: %s)",
+                        TC_LOG_INFO("araxia.mcp", "[MCP] Ground height at ({:.2f}, {:.2f}) on map {} = {:.2f} (source: {})",
                                     x, y, mapId, z, usedDb ? "database" : "vmap");
                         return {
                             {"success", true},
@@ -518,8 +518,8 @@ void RegisterWorldScanTools()
                     };
                 }
                 
-                TC_LOG_INFO("araxia.mcp", "[MCP] World scan for %s (range: %.0f, rays: %d)",
-                            player->GetName().c_str(), range, rayCount);
+                TC_LOG_INFO("araxia.mcp", "[MCP] World scan for {} (range: {:.0f}, rays: {})",
+                            player->GetName(), range, rayCount);
                 
                 json result = PerformWorldScan(player, range, rayCount);
                 

@@ -25,7 +25,11 @@
 #include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "DB2Stores.h"
+#include "AuctionHouseBot.h"
+#include "AuctionHouseMgr.h"
+#include "Item.h"
 #include <sstream>
+#include <map>
 
 namespace Araxia
 {
@@ -272,8 +276,8 @@ void RegisterSpawnTools()
                 };
             }
             
-            TC_LOG_INFO("araxia.mcp", "[MCP] Spawning creature %u (%s) at (%.2f, %.2f, %.2f) on map %u",
-                        entry, cInfo->Name.c_str(), x, y, z, mapId);
+            TC_LOG_INFO("araxia.mcp", "[MCP] Spawning creature {} ({}) at ({:.2f}, {:.2f}, {:.2f}) on map {}",
+                        entry, cInfo->Name, x, y, z, mapId);
             
             // Create the creature
             Creature* creature = new Creature();
@@ -344,7 +348,7 @@ void RegisterSpawnTools()
             uint32 entry = params.value("entry", 0u);
             uint32 mapId = params.value("mapId", 0u);
             
-            TC_LOG_INFO("araxia.mcp", "[MCP] Reloading creatures (entry: %u, map: %u)", entry, mapId);
+            TC_LOG_INFO("araxia.mcp", "[MCP] Reloading creatures (entry: {}, map: {})", entry, mapId);
             
             // TC 11.x doesn't support single-entry reload via API
             // Reload all creature templates
@@ -381,7 +385,7 @@ void RegisterSpawnTools()
             if (command.empty())
                 return {{"success", false}, {"error", "No command specified"}};
             
-            TC_LOG_INFO("araxia.mcp", "[MCP] Console command: %s", command.c_str());
+            TC_LOG_INFO("araxia.mcp", "[MCP] Console command: {}", command);
             
             // Parse the command
             std::istringstream iss(command);
@@ -440,6 +444,168 @@ void RegisterSpawnTools()
                     };
                 }
             }
+            // AHBot commands - useful for managing auction house bot without a player
+            // These mirror the .ahbot GM commands but work from MCP console
+            else if (cmd == "ahbot")
+            {
+                std::string subcmd;
+                iss >> subcmd;
+                
+                if (subcmd == "status")
+                {
+                    // Get AHBot status info
+                    std::unordered_map<AuctionHouseType, AuctionHouseBotStatusInfoPerType> statusInfo;
+                    sAuctionBot->PrepareStatusInfos(statusInfo);
+                    
+                    return {
+                        {"success", true},
+                        {"command", "ahbot status"},
+                        {"alliance", {
+                            {"itemCount", statusInfo[AUCTION_HOUSE_ALLIANCE].ItemsCount}
+                        }},
+                        {"horde", {
+                            {"itemCount", statusInfo[AUCTION_HOUSE_HORDE].ItemsCount}
+                        }},
+                        {"neutral", {
+                            {"itemCount", statusInfo[AUCTION_HOUSE_NEUTRAL].ItemsCount}
+                        }},
+                        {"total", statusInfo[AUCTION_HOUSE_ALLIANCE].ItemsCount +
+                                  statusInfo[AUCTION_HOUSE_HORDE].ItemsCount +
+                                  statusInfo[AUCTION_HOUSE_NEUTRAL].ItemsCount}
+                    };
+                }
+                else if (subcmd == "rebuild")
+                {
+                    std::string arg;
+                    iss >> arg;
+                    bool all = (arg == "all");
+                    
+                    sAuctionBot->Rebuild(all);
+                    
+                    return {
+                        {"success", true},
+                        {"command", "ahbot rebuild"},
+                        {"all", all},
+                        {"message", all ? "Rebuilding all auction house items" : "Rebuilding auction house items"}
+                    };
+                }
+                else if (subcmd == "reload")
+                {
+                    sAuctionBot->ReloadAllConfig();
+                    return {
+                        {"success", true},
+                        {"command", "ahbot reload"},
+                        {"message", "AHBot configuration reloaded"}
+                    };
+                }
+                else if (subcmd == "stats")
+                {
+                    // Item level statistics - mirrors the new .ahbot stats command
+                    std::string arg;
+                    iss >> arg;
+                    bool equipmentOnly = (arg == "equipment");
+                    
+                    std::map<uint32, uint32> itemLevelBuckets;
+                    uint32 totalItems = 0;
+                    uint32 equipmentItems = 0;
+                    uint32 minItemLevel = UINT32_MAX;
+                    uint32 maxItemLevel = 0;
+                    uint64 totalItemLevel = 0;
+                    
+                    std::vector<uint32> auctionHouseIds = { 1, 2, 6, 7 };
+                    
+                    for (uint32 ahId : auctionHouseIds)
+                    {
+                        AuctionHouseObject* auctionHouse = sAuctionMgr->GetAuctionsById(ahId);
+                        if (!auctionHouse)
+                            continue;
+                        
+                        for (auto itr = auctionHouse->GetAuctionsBegin(); itr != auctionHouse->GetAuctionsEnd(); ++itr)
+                        {
+                            AuctionPosting& auction = itr->second;
+                            for (Item* item : auction.Items)
+                            {
+                                if (!item)
+                                    continue;
+                                
+                                ItemTemplate const* proto = item->GetTemplate();
+                                if (!proto)
+                                    continue;
+                                
+                                bool isEquipment = (proto->GetClass() == ITEM_CLASS_WEAPON || proto->GetClass() == ITEM_CLASS_ARMOR);
+                                
+                                if (equipmentOnly && !isEquipment)
+                                    continue;
+                                
+                                if (isEquipment)
+                                    ++equipmentItems;
+                                
+                                uint32 itemLevel = Item::GetItemLevel(proto, *item->GetBonus(), 90, 0, 0, 0, 0, false, 0);
+                                
+                                ++totalItems;
+                                totalItemLevel += itemLevel;
+                                
+                                if (itemLevel < minItemLevel)
+                                    minItemLevel = itemLevel;
+                                if (itemLevel > maxItemLevel)
+                                    maxItemLevel = itemLevel;
+                                
+                                uint32 bucket = (itemLevel / 50) * 50;
+                                itemLevelBuckets[bucket]++;
+                            }
+                        }
+                    }
+                    
+                    if (totalItems == 0)
+                    {
+                        return {
+                            {"success", true},
+                            {"command", "ahbot stats"},
+                            {"message", "No items found in auction house"},
+                            {"totalItems", 0}
+                        };
+                    }
+                    
+                    json distribution = json::array();
+                    for (auto const& [bucket, count] : itemLevelBuckets)
+                    {
+                        distribution.push_back({
+                            {"minLevel", bucket},
+                            {"maxLevel", bucket + 49},
+                            {"count", count},
+                            {"percentage", (static_cast<float>(count) / totalItems) * 100.0f}
+                        });
+                    }
+                    
+                    return {
+                        {"success", true},
+                        {"command", "ahbot stats"},
+                        {"equipmentOnly", equipmentOnly},
+                        {"totalItems", totalItems},
+                        {"equipmentItems", equipmentItems},
+                        {"minItemLevel", minItemLevel},
+                        {"maxItemLevel", maxItemLevel},
+                        {"avgItemLevel", static_cast<float>(totalItemLevel) / totalItems},
+                        {"distribution", distribution},
+                        {"scalingConfig", {
+                            {"enabled", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_ENABLED)},
+                            {"minTargetLevel", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_MIN_ITEM_LEVEL)},
+                            {"maxTargetLevel", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_MAX_ITEM_LEVEL)},
+                            {"chance", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_CHANCE)},
+                            {"equipmentOnly", sAuctionBotConfig->GetConfig(CONFIG_AHBOT_ITEM_SCALING_EQUIPMENT_ONLY)}
+                        }}
+                    };
+                }
+                else
+                {
+                    return {
+                        {"success", false},
+                        {"error", "Unknown ahbot subcommand"},
+                        {"subcommand", subcmd},
+                        {"supported", {"status", "rebuild [all]", "reload", "stats [equipment]"}}
+                    };
+                }
+            }
             
             return {
                 {"success", false},
@@ -448,7 +614,11 @@ void RegisterSpawnTools()
                 {"supported", {
                     "server info",
                     "reload creature [entry]",
-                    "reload creature_spawns (requires restart)"
+                    "reload creature_spawns (requires restart)",
+                    "ahbot status",
+                    "ahbot rebuild [all]",
+                    "ahbot reload",
+                    "ahbot stats [equipment]"
                 }}
             };
         }

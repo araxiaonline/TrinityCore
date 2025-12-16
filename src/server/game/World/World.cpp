@@ -25,9 +25,12 @@
 #include "LuaEngine/ElunaConfig.h"
 #include "LuaEngine/ElunaLoader.h"
 #include "AraxiaMCPServer.h"
+#include "AraxiaEventBus.h"
+#include "AraxiaEventBusConfig.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AreaTriggerDataStore.h"
+#include "AraxiaCore.h"
 #include "ArenaTeamMgr.h"
 #include "AuctionHouseBot.h"
 #include "AuctionHouseMgr.h"
@@ -189,6 +192,9 @@ World::~World()
 {
     ///- Shutdown Araxia MCP Server
     sMCPServer->Shutdown();
+
+    ///- Shutdown Araxia Event Bus (ZeroMQ)
+    sAraxiaEventBus->Shutdown();
 
     ///- Empty the kicked session set
     while (!m_sessions.empty())
@@ -1276,6 +1282,35 @@ bool World::SetInitialWorldSettings()
     sElunaLoader->LoadScripts();
     TC_LOG_INFO("server.loading", "Eluna initialization complete");
 
+    ///- Initialize Araxia Event Bus (ZeroMQ)
+    TC_LOG_INFO("server.loading", "Initializing Araxia Event Bus...");
+    sAraxiaEventBusConfig->LoadConfig();
+    if (!sAraxiaEventBus->Initialize(
+            sAraxiaEventBusConfig->GetPublishEndpoint(),
+            sAraxiaEventBusConfig->GetSubscribeEndpoint()))
+    {
+        TC_LOG_ERROR("server.loading", "Failed to initialize Araxia Event Bus - continuing without ZMQ events");
+    }
+    else
+    {
+        // Set up map type resolver using DB2 stores (eventbus library doesn't have direct access)
+        sAraxiaEventBus->SetMapTypeResolver([](uint32 mapId) -> ContentType {
+            MapEntry const* mapEntry = sMapStore.LookupEntry(mapId);
+            if (!mapEntry)
+                return ContentType::World;
+            if (mapEntry->IsRaid())
+                return ContentType::Raid;
+            if (mapEntry->IsNonRaidDungeon())
+                return ContentType::Dungeon;
+            if (mapEntry->IsBattleground())
+                return ContentType::Battleground;
+            if (mapEntry->IsBattleArena())
+                return ContentType::Arena;
+            return ContentType::World;
+        });
+        TC_LOG_INFO("server.loading", "Araxia Event Bus initialized");
+    }
+
     ///- Initialize Allowed Security Level
     LoadDBAllowedSecurityLevel();
 
@@ -2173,6 +2208,12 @@ void World::Update(uint32 diff)
     ///- Update Eluna (process reload flag, timed events, async queries)
     if (Eluna* e = GetEluna())
         e->UpdateEluna(diff);
+
+    ///- Update Araxia systems (MCP player sessions, etc.)
+    sAraxiaCore->Update(diff);
+
+    ///- Update Araxia Event Bus (process inbound ZMQ messages)
+    sAraxiaEventBus->Update(diff);
 
     ///- Update the different timers
     for (int i = 0; i < WUPDATE_COUNT; ++i)

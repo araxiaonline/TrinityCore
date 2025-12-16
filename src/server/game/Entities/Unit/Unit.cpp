@@ -17,6 +17,7 @@
 
 #include "Unit.h"
 #include "AbstractFollower.h"
+#include "AraxiaEventBus.h"
 #include "Battlefield.h"
 #include "BattlefieldMgr.h"
 #include "Battleground.h"
@@ -11257,6 +11258,18 @@ void Unit::SetMeleeAnimKitId(uint16 animKitId)
     // 10% durability loss on death
     if (Player* plrVictim = victim->ToPlayer())
     {
+        // Araxia: Publish player death event to ZeroMQ event bus
+        // This is the canonical death hook - Unit::Kill() handles all player deaths
+        // including GM commands, combat, environmental damage, etc.
+        sAraxiaEventBus->Publish(PlayerEvent(
+            "death",
+            plrVictim->GetGUID().GetCounter(),
+            plrVictim->GetName(),
+            plrVictim->GetMapId(),
+            plrVictim->GetInstanceId(),
+            sAraxiaEventBus->GetContentTypeForMap(plrVictim->GetMapId())
+        ));
+
         // remember victim PvP death for corpse type and corpse reclaim delay
         // at original death (not at SpiritOfRedemtionTalent timeout)
         plrVictim->SetPvPDeath(player != nullptr);
