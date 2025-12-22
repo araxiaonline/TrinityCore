@@ -51,7 +51,12 @@
 #include "ObjectMgr.h"
 #include "SmartScriptMgr.h"
 #include "Chat.h"
+#include "AraxiaEventBus.h"
+#include "AuctionHouseMgr.h"
+#include "Item.h"
 #include <sstream>
+#include <algorithm>
+#include <cwctype>
 
 namespace Araxia
 {
@@ -719,7 +724,193 @@ void RegisterServerTools()
         }
     );
     
-    TC_LOG_INFO("araxia.mcp", "[MCP] Server tools registered (server_info, player_list, gm_command, reload_scripts, log_search, shared_data_*)");
+    // publish_test_event - Publish a test event to the event bus for UI testing
+    // This tool allows AI assistants to test event-driven UIs like the Auction House page
+    // without needing actual in-game activity.
+    sMCPServer->RegisterTool(
+        "publish_test_event",
+        "Publish a test event to the ZeroMQ event bus. Useful for testing event-driven UIs.",
+        {
+            {"type", "object"},
+            {"properties", {
+                {"topic", {{"description", "Event topic (e.g., 'world.auction.create', 'world.player.login')"}, {"type", "string"}}},
+                {"payload", {{"description", "JSON payload object for the event"}, {"type", "object"}}}
+            }},
+            {"required", {"topic", "payload"}}
+        },
+        [](const json& params) -> json {
+            std::string topic = params.value("topic", "");
+            
+            if (topic.empty())
+                return {{"success", false}, {"error", "Topic is required"}};
+            
+            if (!params.contains("payload"))
+                return {{"success", false}, {"error", "Payload is required"}};
+            
+            // Get payload as string
+            std::string payloadStr = params["payload"].dump();
+            
+            // Publish to event bus
+            sAraxiaEventBus->Publish(topic, payloadStr);
+            
+            TC_LOG_DEBUG("araxia.mcp", "[MCP] Published test event: {} with payload: {}", topic, payloadStr);
+            
+            return {
+                {"success", true},
+                {"topic", topic},
+                {"payload", params["payload"]},
+                {"message", "Event published to event bus"}
+            };
+        }
+    );
+    
+    // auction_search - Search the auction house using the same bucket system the client uses.
+    // The server stores auctions in "buckets" indexed by item, with pre-computed FullName
+    // arrays for each locale. We search the bucket FullName to match client behavior.
+    // AHBot items are stored in memory, not in item_instance table, so we must query
+    // the server directly rather than the database.
+    sMCPServer->RegisterTool(
+        "auction_search",
+        "Search the auction house using the server's native bucket search (same as game client).",
+        {
+            {"type", "object"},
+            {"properties", {
+                {"name", {{"description", "Item name to search for (partial match, case-insensitive)"}, {"type", "string"}}},
+                {"quality", {{"description", "Minimum quality (0=Poor, 1=Common, 2=Uncommon, 3=Rare, 4=Epic, 5=Legendary)"}, {"type", "integer"}}},
+                {"faction", {{"description", "Faction: 'alliance', 'horde', 'neutral', or 'all' (default)"}, {"type", "string"}}},
+                {"limit", {{"description", "Max results to return (default 50)"}, {"type", "integer"}}}
+            }}
+        },
+        [](const json& params) -> json {
+            std::string nameFilter = params.value("name", "");
+            int qualityFilter = params.value("quality", -1);
+            std::string factionFilter = params.value("faction", "all");
+            int limit = params.value("limit", 50);
+            
+            // Convert name filter to wide string for searching bucket FullName
+            // The server uses wide strings for localized names
+            std::wstring wideNameFilter;
+            if (!nameFilter.empty())
+            {
+                // Convert to lowercase wide string for case-insensitive matching
+                for (char c : nameFilter)
+                    wideNameFilter += std::towlower(static_cast<wchar_t>(c));
+            }
+            
+            json results = json::array();
+            int total = 0;
+            
+            // Helper lambda to search an auction house using bucket data
+            auto searchAuctionHouse = [&](AuctionHouseObject* ah, const std::string& faction) {
+                if (!ah) return;
+                
+                for (auto itr = ah->GetAuctionsBegin(); itr != ah->GetAuctionsEnd(); ++itr)
+                {
+                    AuctionPosting& auction = itr->second;
+                    
+                    // Get bucket data for proper name searching (same as client)
+                    if (!auction.Bucket) continue;
+                    AuctionsBucketData* bucket = auction.Bucket;
+                    
+                    // Get item info from the first item
+                    if (auction.Items.empty()) continue;
+                    Item* item = auction.Items[0];
+                    if (!item) continue;
+                    
+                    ItemTemplate const* itemTemplate = item->GetTemplate();
+                    if (!itemTemplate) continue;
+                    
+                    // Quality filter - check bucket's quality mask
+                    if (qualityFilter >= 0 && itemTemplate->GetQuality() < qualityFilter)
+                        continue;
+                    
+                    // Name filter using bucket's FullName (same as server's BuildListBuckets)
+                    if (!wideNameFilter.empty())
+                    {
+                        // Get the localized full name from the bucket
+                        const std::wstring& fullName = bucket->FullName[LOCALE_enUS];
+                        
+                        // Convert to lowercase for case-insensitive search
+                        std::wstring lowerFullName;
+                        for (wchar_t wc : fullName)
+                            lowerFullName += std::towlower(wc);
+                        
+                        // Search for substring match
+                        if (lowerFullName.find(wideNameFilter) == std::wstring::npos)
+                            continue;
+                    }
+                    
+                    total++;
+                    
+                    if ((int)results.size() < limit)
+                    {
+                        // Calculate time remaining
+                        auto now = GameTime::GetSystemTime();
+                        auto remaining = std::chrono::duration_cast<std::chrono::seconds>(auction.EndTime - now).count();
+                        std::string timeLeft = "Expired";
+                        if (remaining > 0)
+                        {
+                            if (remaining < 1800) timeLeft = "Short";
+                            else if (remaining < 7200) timeLeft = "Medium";
+                            else if (remaining < 43200) timeLeft = "Long";
+                            else timeLeft = "Very Long";
+                        }
+                        
+                        // Convert wide string name back to UTF-8 for JSON
+                        std::string itemName;
+                        for (wchar_t wc : bucket->FullName[LOCALE_enUS])
+                        {
+                            if (wc < 128)
+                                itemName += static_cast<char>(wc);
+                            else
+                                itemName += '?'; // Non-ASCII placeholder
+                        }
+                        
+                        // Fallback to template name if bucket name is empty
+                        if (itemName.empty())
+                            itemName = itemTemplate->GetName(LOCALE_enUS);
+                        
+                        // Get item stats from bucket data
+                        // RequiredLevel and ItemLevel are stored in the bucket for efficiency
+                        uint8 requiredLevel = bucket->RequiredLevel;
+                        uint16 itemLevel = bucket->Key.ItemLevel;
+                        
+                        results.push_back({
+                            {"auctionId", auction.Id},
+                            {"itemId", itemTemplate->GetId()},
+                            {"itemName", itemName},
+                            {"itemQuality", itemTemplate->GetQuality()},
+                            {"itemLevel", itemLevel},
+                            {"requiredLevel", requiredLevel},
+                            {"count", auction.GetTotalItemCount()},
+                            {"buyout", auction.BuyoutOrUnitPrice},
+                            {"bid", auction.MinBid},
+                            {"currentBid", auction.BidAmount},
+                            {"timeLeft", timeLeft},
+                            {"faction", faction}
+                        });
+                    }
+                }
+            };
+            
+            // Search appropriate auction houses based on faction filter
+            if (factionFilter == "all" || factionFilter == "alliance")
+                searchAuctionHouse(sAuctionMgr->GetAuctionsById(2), "alliance");
+            if (factionFilter == "all" || factionFilter == "horde")
+                searchAuctionHouse(sAuctionMgr->GetAuctionsById(6), "horde");
+            if (factionFilter == "all" || factionFilter == "neutral")
+                searchAuctionHouse(sAuctionMgr->GetAuctionsById(7), "neutral");
+            
+            return {
+                {"success", true},
+                {"total", total},
+                {"count", results.size()},
+                {"auctions", results}
+            };
+        }
+    );
+    
+    TC_LOG_INFO("araxia.mcp", "[MCP] Server tools registered (server_info, player_list, gm_command, reload_scripts, log_search, shared_data_*, publish_test_event, auction_search)");
 }
 
 } // namespace Araxia

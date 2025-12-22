@@ -69,7 +69,7 @@ The Event Bus is a ZeroMQ-based real-time event system that publishes game event
 
 ### Quick Test
 ```bash
-cd /opt/trinitycore/TrinityCore/src/araxiaonline/tools
+cd /opt/trinitycore/araxia-content-tools/scripts/zeromq
 source .venv/bin/activate
 python zmq_subscriber.py
 ```
@@ -103,7 +103,7 @@ Scarletseer can trigger events for the ZeroMQ event bus:
 - **Loot events**: item looted
 - **Encounter events**: start, wipe, end (requires dungeon/raid)
 
-Monitor events with: `python /opt/trinitycore/TrinityCore/src/araxiaonline/tools/zmq_subscriber.py`
+Monitor events with: `python /opt/trinitycore/araxia-content-tools/scripts/zeromq/zmq_subscriber.py`
 
 ---
 

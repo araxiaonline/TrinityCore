@@ -881,7 +881,7 @@ bool MCPPlayerManager::CastSpell(uint32 sessionId, uint32 spellId, ObjectGuid ta
     return player->CastSpell(target, spellId, false) == SPELL_CAST_OK;
 }
 
-bool MCPPlayerManager::InteractWith(uint32 sessionId, ObjectGuid targetGuid)
+bool MCPPlayerManager::InteractWith(uint32 sessionId, ObjectGuid /*targetGuid*/)
 {
     Player* player = GetPlayer(sessionId);
     if (!player)
@@ -942,7 +942,7 @@ std::string MCPPlayerManager::ExecuteCommand(uint32 sessionId, const std::string
 // Perception
 // ============================================================================
 
-std::vector<ObjectGuid> MCPPlayerManager::GetNearbyEntities(uint32 sessionId, float range, uint32 typeMask) const
+std::vector<ObjectGuid> MCPPlayerManager::GetNearbyEntities(uint32 sessionId, float /*range*/, uint32 /*typeMask*/) const
 {
     std::vector<ObjectGuid> result;
     
@@ -993,7 +993,7 @@ void MCPPlayerManager::CapturePacket(uint32 sessionId, WorldPacket const& packet
         session->outboundPackets.pop();
 }
 
-void MCPPlayerManager::QueueInboundPacket(uint32 sessionId, uint16 opcode, const std::vector<uint8>& data)
+void MCPPlayerManager::QueueInboundPacket(uint32 /*sessionId*/, uint16 /*opcode*/, const std::vector<uint8>& /*data*/)
 {
     // TODO: Implement when we need to inject packets into the session
     TC_LOG_DEBUG("araxia.mcp", "[MCPPlayerManager] QueueInboundPacket not yet implemented");

@@ -1000,6 +1000,8 @@ void AuctionHouseObject::AddAuction(CharacterDatabaseTransaction trans, AuctionP
             ownerName = owner->GetName();
         else if (CharacterCacheEntry const* entry = sCharacterCache->GetCharacterCacheByGuid(addedAuction->Owner))
             ownerName = entry->Name;
+        else if (addedAuction->Owner.GetCounter() == 0)
+            ownerName = "AHBot";  // Auction House Bot auctions have no real owner
         
         uint32 itemEntry = 0;
         uint32 itemCount = 0;

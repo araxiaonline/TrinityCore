@@ -3883,6 +3883,41 @@ AuctionHouseBot.Class.Misc = 5
 AuctionHouseBot.Class.Glyph = 3
 
 #
+#    AuctionHouseBot.Items.Scaling.*
+#       Description: Item level scaling for AHBot items. When enabled, equipment items
+#                    posted by AHBot can receive random item level bonuses, allowing
+#                    the AH to stock gear suitable for all player progression levels.
+#                    Uses the same ItemBonusMgr system as Timewalking/Remix scaling.
+#
+#    AuctionHouseBot.Items.Scaling.Enabled
+#       Description: Enable item level scaling for AHBot items
+#       Default:     0 - (Disabled, items use base item level)
+#                    1 - (Enabled, items may receive random item level bonuses)
+#
+#    AuctionHouseBot.Items.Scaling.MinItemLevel
+#       Description: Minimum target item level for scaled items
+#       Default:     0 - (Use item's base level as minimum)
+#
+#    AuctionHouseBot.Items.Scaling.MaxItemLevel
+#       Description: Maximum target item level for scaled items
+#       Default:     550 - (MoP raid gear level)
+#
+#    AuctionHouseBot.Items.Scaling.Chance
+#       Description: Percentage chance (0-100) for each item to be scaled
+#       Default:     50 - (50% of eligible items get scaled)
+#
+#    AuctionHouseBot.Items.Scaling.EquipmentOnly
+#       Description: Only scale equipment (weapons/armor), not consumables/materials
+#       Default:     1 - (Only equipment is scaled)
+#                    0 - (All item types can be scaled)
+
+AuctionHouseBot.Items.Scaling.Enabled = 1
+AuctionHouseBot.Items.Scaling.MinItemLevel = 200
+AuctionHouseBot.Items.Scaling.MaxItemLevel = 550
+AuctionHouseBot.Items.Scaling.Chance = 75
+AuctionHouseBot.Items.Scaling.EquipmentOnly = 1
+
+#
 ###################################################################################################
 
 ###################################################################################################
@@ -4459,3 +4494,41 @@ Load.Locales = 1
 
 #
 ###################################################################################################
+
+###################################################################################################
+# ELUNA CONFIGURATION
+###################################################################################################
+
+# Enable Eluna Lua scripting engine
+Eluna.Enabled = 1
+
+# Path to Lua scripts directory
+Eluna.ScriptPath = "/opt/trinitycore/lua_scripts"
+
+# Enable unsafe methods
+Eluna.UseUnsafeMethods = 1
+
+# Enable deprecated methods for backward compatibility
+Eluna.UseDeprecatedMethods = 1
+
+# Enable .reload lua command
+Eluna.ReloadCommand = 1
+
+# Minimum account level for .reload lua command (0-3)
+# 0 = Player, 1 = Moderator, 2 = GameMaster, 3 = Administrator
+Eluna.ReloadSecurityLevel = 3
+
+# Enable automatic script reloading on file changes
+Eluna.ScriptReloader = 0
+
+# Enable detailed error tracebacks
+Eluna.TraceBack = 1
+
+# Only load Eluna on specific maps (comma-separated, empty = all maps)
+Eluna.OnlyOnMaps =
+
+# Extra paths for Lua require() function (semicolon-separated)
+Eluna.RequirePaths =
+
+# Extra C library paths for Lua require() (semicolon-separated)
+Eluna.RequireCPaths =

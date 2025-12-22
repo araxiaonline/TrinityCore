@@ -29,25 +29,27 @@ AraxiaEventBusConfig* AraxiaEventBusConfig::Instance()
 
 void AraxiaEventBusConfig::LoadConfig()
 {
-    _publishEndpoint = sConfigMgr->GetStringDefault("Araxia.EventBus.PublishEndpoint"sv, "tcp://*:5555"sv);
-    _subscribeEndpoint = sConfigMgr->GetStringDefault("Araxia.EventBus.SubscribeEndpoint"sv, "tcp://127.0.0.1:5556"sv);
-    _enableSpawnEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableSpawnEvents"sv, true);
-    _enableEncounterEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableEncounterEvents"sv, true);
-    _enablePlayerEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnablePlayerEvents"sv, true);
-    _enableCombatEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableCombatEvents"sv, true);
-    _enableLootEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableLootEvents"sv, true);
-    _enableQuestEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableQuestEvents"sv, true);
-    _enableZoneEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableZoneEvents"sv, true);
-    _enablePartyEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnablePartyEvents"sv, true);
-    _enableItemEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableItemEvents"sv, true);
-    _enableSpellEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableSpellEvents"sv, false);  // High volume
-    _enableLevelEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableLevelEvents"sv, true);
-    _enableChatEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableChatEvents"sv, true);
-    _enableAchievementEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableAchievementEvents"sv, true);
-    _enableAuctionEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableAuctionEvents"sv, true);
-    _enableMailEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableMailEvents"sv, true);
-    _enableTradeEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableTradeEvents"sv, true);
-    _enableGuildEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableGuildEvents"sv, true);
+    // Use quiet=true to suppress "Missing name" warnings since we have sensible defaults
+    // Config can be set in worldserver.conf or worldserver.conf.d/*.conf
+    _publishEndpoint = sConfigMgr->GetStringDefault("Araxia.EventBus.PublishEndpoint"sv, "tcp://*:5555"sv, true);
+    _subscribeEndpoint = sConfigMgr->GetStringDefault("Araxia.EventBus.SubscribeEndpoint"sv, "tcp://127.0.0.1:5556"sv, true);
+    _enableSpawnEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableSpawnEvents"sv, true, true);
+    _enableEncounterEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableEncounterEvents"sv, true, true);
+    _enablePlayerEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnablePlayerEvents"sv, true, true);
+    _enableCombatEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableCombatEvents"sv, true, true);
+    _enableLootEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableLootEvents"sv, true, true);
+    _enableQuestEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableQuestEvents"sv, true, true);
+    _enableZoneEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableZoneEvents"sv, true, true);
+    _enablePartyEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnablePartyEvents"sv, true, true);
+    _enableItemEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableItemEvents"sv, true, true);
+    _enableSpellEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableSpellEvents"sv, false, true);  // High volume - disabled by default
+    _enableLevelEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableLevelEvents"sv, true, true);
+    _enableChatEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableChatEvents"sv, true, true);
+    _enableAchievementEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableAchievementEvents"sv, true, true);
+    _enableAuctionEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableAuctionEvents"sv, true, true);
+    _enableMailEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableMailEvents"sv, true, true);
+    _enableTradeEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableTradeEvents"sv, true, true);
+    _enableGuildEvents = sConfigMgr->GetBoolDefault("Araxia.EventBus.EnableGuildEvents"sv, true, true);
     
     TC_LOG_INFO("araxia.eventbus", "EventBus config loaded:");
     TC_LOG_INFO("araxia.eventbus", "  PublishEndpoint: {}", _publishEndpoint);
