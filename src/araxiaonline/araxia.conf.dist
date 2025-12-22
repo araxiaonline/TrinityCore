@@ -148,10 +148,35 @@ Araxia.EventBus.EnableGuildEvents = 1
 #        When disabled, uses HTTP transport.
 #        Default: 1 (stdio mode)
 #
+#    Araxia.MCP.Enable
+#        Enable the embedded MCP server for AI assistant integration.
+#        Default: 0 (disabled)
+#
+#    Araxia.MCP.Port
+#        Port for the MCP HTTP server.
+#        Default: 8765
+#
+#    Araxia.MCP.AuthToken
+#        Bearer token for authentication. Leave empty for no auth (development only!).
+#        Default: "" (no auth)
+#
+#    Araxia.MCP.AllowRemote
+#        Allow connections from non-localhost addresses.
+#        Default: 0 (localhost only)
+#
 ###############################################################################
 
 Araxia.MCP.Enable = 1
 Araxia.MCP.StdioMode = 1
+Araxia.MCP.Enable = 1
+Araxia.MCP.Port = 8765
+Araxia.MCP.AuthToken = ""
+Araxia.MCP.AllowRemote = 1
+
+# MCP Player Settings
+Araxia.MCP.Player.MaxSessions = 10
+Araxia.MCP.Player.DefaultAccountId = 0
+Araxia.MCP.Player.SessionTimeout = 3600
 
 ###############################################################################
 #
@@ -166,3 +191,4 @@ Araxia.MCP.StdioMode = 1
 
 Araxia.Eluna.EnableSharedData = 1
 
+Logger.araxia.eventbus=1,Console Server
