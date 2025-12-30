@@ -874,7 +874,7 @@ void RegisterServerTools()
                     if (!itemTemplate) continue;
                     
                     // Quality filter - check bucket's quality mask
-                    if (qualityFilter >= 0 && itemTemplate->GetQuality() < qualityFilter)
+                    if (qualityFilter >= 0 && static_cast<int>(itemTemplate->GetQuality()) < qualityFilter)
                         continue;
                     
                     // Name filter using bucket's FullName (same as server's BuildListBuckets)

@@ -77,6 +77,7 @@ bool MCPServer::Initialize()
     RegisterDatabaseTools();
     RegisterWorldScanTools();  // LIDAR-style spatial awareness
     RegisterSpawnTools();      // Headless spawn management
+    RegisterAgentTools();      // Agent chat - bidirectional player↔AI messaging
     
     // Initialize AraxiaCore (provides World::Update hook for all Araxia systems)
     sAraxiaCore->Initialize();

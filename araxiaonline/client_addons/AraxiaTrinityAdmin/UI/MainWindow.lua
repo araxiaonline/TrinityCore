@@ -97,6 +97,20 @@ mainWindow:SetScript("OnHide", function(self)
     AraxiaTrinityAdminDB.windowShown = false
 end)
 
+-- Movement-based opacity: 70% opaque when moving, 100% when stopped
+local MOVING_ALPHA = 0.3  -- 70% opaque = 30% alpha
+local STOPPED_ALPHA = 1.0
+local movementFrame = CreateFrame("Frame")
+movementFrame:RegisterEvent("PLAYER_STARTED_MOVING")
+movementFrame:RegisterEvent("PLAYER_STOPPED_MOVING")
+movementFrame:SetScript("OnEvent", function(self, event)
+    if event == "PLAYER_STARTED_MOVING" then
+        mainWindow:SetAlpha(MOVING_ALPHA)
+    elseif event == "PLAYER_STOPPED_MOVING" then
+        mainWindow:SetAlpha(STOPPED_ALPHA)
+    end
+end)
+
 -- Determine content area (Inset or fallback to mainWindow with margins)
 local contentArea = mainWindow.Inset or mainWindow
 local topOffset = mainWindow.Inset and -4 or -30  -- Account for title bar if no Inset

@@ -46,9 +46,46 @@ deleteButton:SetSize(80, 22)
 deleteButton:SetPoint("LEFT", refreshButton, "RIGHT", 5, 0)
 deleteButton:SetText("Delete")
 
+local respawnButton = CreateFrame("Button", nil, npcPanel, "UIPanelButtonTemplate")
+respawnButton:SetSize(80, 22)
+respawnButton:SetPoint("LEFT", deleteButton, "RIGHT", 5, 0)
+respawnButton:SetText("Respawn")
+
+respawnButton:SetScript("OnClick", function()
+    if AMS then
+        print("|cFF00FF00[ATA]|r Requesting respawn...")
+        AMS.Send("RESPAWN_TARGET", {})
+    else
+        print("|cFFFF0000[ATA]|r AMS not available")
+    end
+end)
+
+respawnButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine("Respawn Target", 1, 1, 1)
+    GameTooltip:AddLine("Force despawn and respawn the targeted creature", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("Useful after changing creature template data", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+
+respawnButton:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+end)
+
+-- Register response handler for respawn
+if AMS then
+    AMS.RegisterHandler("RESPAWN_TARGET_RESPONSE", function(data)
+        if data.success then
+            print("|cFF00FF00[ATA]|r " .. data.message .. " (" .. data.creature .. ")")
+        else
+            print("|cFFFF0000[ATA]|r Respawn failed: " .. (data.error or "Unknown error"))
+        end
+    end)
+end
+
 local waypointButton = CreateFrame("Button", nil, npcPanel, "UIPanelButtonTemplate")
 waypointButton:SetSize(110, 22)
-waypointButton:SetPoint("LEFT", deleteButton, "RIGHT", 5, 0)
+waypointButton:SetPoint("LEFT", respawnButton, "RIGHT", 5, 0)
 waypointButton:SetText("Show Waypoints")
 waypointButton:Disable()  -- Disabled until we have a creature with waypoints
 
@@ -1296,7 +1333,7 @@ end
 -- Content Formatters
 -- ============================================================================
 
-local function FormatBasicTab(npcData)
+local function FormatBasicTab(npcData, sData)
     if not npcData then
         return "No valid NPC target found.\n\nPlease target a creature or NPC."
     end
@@ -1306,6 +1343,9 @@ local function FormatBasicTab(npcData)
     table.insert(lines, string.format("  |cFF00FF00Name:|r %s", npcData.name or "Unknown"))
     table.insert(lines, string.format("  |cFF00FF00Entry ID:|r %s", npcData.npcID or "Unknown"))
     table.insert(lines, string.format("  |cFF00FF00GUID:|r %s", npcData.guid or "Unknown"))
+    -- Spawn ID from server data (database guid)
+    local spawnId = (sData and sData.success and sData.basic and sData.basic.spawnId) or "Unknown"
+    table.insert(lines, string.format("  |cFF00FF00Spawn ID:|r %s", spawnId))
     table.insert(lines, string.format("  |cFF00FF00Level:|r %s", npcData.level == -1 and "??" or npcData.level))
     table.insert(lines, "")
     
@@ -1333,6 +1373,62 @@ local function FormatBasicTab(npcData)
     table.insert(lines, string.format("  |cFF00FF00Creature Type:|r %s", npcData.creatureType or "Unknown"))
     table.insert(lines, string.format("  |cFF00FF00Faction:|r %s", npcData.faction or "Unknown"))
     table.insert(lines, "")
+    
+    -- Position data (from server)
+    if sData and sData.success and sData.position then
+        table.insert(lines, "|cFFFFD700Location|r")
+        
+        -- Spawn/Home position
+        if sData.position.spawn then
+            local sp = sData.position.spawn
+            table.insert(lines, string.format("  |cFF00FF00Spawn:|r %.1f, %.1f, %.1f", sp.x or 0, sp.y or 0, sp.z or 0))
+        end
+        
+        -- Current position
+        if sData.position.current then
+            local cp = sData.position.current
+            table.insert(lines, string.format("  |cFF00FF00Current:|r %.1f, %.1f, %.1f", cp.x or 0, cp.y or 0, cp.z or 0))
+            if cp.mapId then
+                table.insert(lines, string.format("  |cFF00FF00Map/Zone/Area:|r %d / %d / %d", cp.mapId or 0, cp.zoneId or 0, cp.areaId or 0))
+            end
+        end
+        table.insert(lines, "")
+    end
+    
+    -- Behavior flags (from server)
+    if sData and sData.success and sData.flags then
+        table.insert(lines, "|cFFFFD700Behavior Flags|r")
+        
+        -- NPC Flags
+        if sData.flags.npcFlags and sData.flags.npcFlags > 0 then
+            local flagStr = ""
+            if sData.flags.npcFlagNames and #sData.flags.npcFlagNames > 0 then
+                flagStr = table.concat(sData.flags.npcFlagNames, ", ")
+            else
+                flagStr = tostring(sData.flags.npcFlags)
+            end
+            table.insert(lines, string.format("  |cFF00FF00NPC Flags:|r %s", flagStr))
+        else
+            table.insert(lines, "  |cFF00FF00NPC Flags:|r None")
+        end
+        
+        -- Unit Flags
+        if sData.flags.unitFlags and sData.flags.unitFlags > 0 then
+            local flagStr = ""
+            if sData.flags.unitFlagNames and #sData.flags.unitFlagNames > 0 then
+                flagStr = table.concat(sData.flags.unitFlagNames, ", ")
+            else
+                flagStr = tostring(sData.flags.unitFlags)
+            end
+            table.insert(lines, string.format("  |cFF00FF00Unit Flags:|r %s", flagStr))
+        else
+            table.insert(lines, "  |cFF00FF00Unit Flags:|r None")
+        end
+        table.insert(lines, "")
+    elseif not sData or not sData.success then
+        table.insert(lines, "|cFF888888Click Refresh to load location/flags data|r")
+        table.insert(lines, "")
+    end
     
     table.insert(lines, "|cFFFFD700GM Commands|r")
     table.insert(lines, string.format("  |cFFFFFF00.npc info|r"))
@@ -1661,7 +1757,7 @@ function npcPanel:Update(requestServerData, forceRefresh)
     local npcData = ATA:GetTargetNPCInfo()
     
     -- Update Basic tab
-    contentFrames["Basic"].text:SetText(FormatBasicTab(npcData))
+    contentFrames["Basic"].text:SetText(FormatBasicTab(npcData, serverData))
     UpdateContentSize(contentFrames["Basic"])
     
     -- Update Stats tab
@@ -1682,6 +1778,7 @@ function npcPanel:Update(requestServerData, forceRefresh)
         serverData = nil
         
         -- Update displays to show loading
+        contentFrames["Basic"].text:SetText(FormatBasicTab(npcData, nil))
         contentFrames["Stats"].text:SetText(FormatStatsTab(npcData, nil))
         contentFrames["AI"].text:SetText(FormatAITab(npcData, nil))
         contentFrames["Raw"].text:SetText(FormatRawTab(npcData, nil))

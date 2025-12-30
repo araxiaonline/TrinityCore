@@ -222,6 +222,36 @@ UIParent
 - `|cFF0070DD` - Blue (rare)
 - `|cFFFF00FF` - Purple (rare elite)
 
+### Agent Chat Panel (`UI/Panels/AgentChatPanel.lua`)
+Bidirectional chat interface for communicating with AI agents (like Cascade).
+
+**Features:**
+- Agent selector dropdown with online/offline status
+- Chat history scrollframe with timestamps
+- Message input with Enter-to-send
+- Auto-subscribe to push updates when panel opens
+- Context attachment (target info) with messages
+
+**Data Flow:**
+1. Player sends message via AMS `AGENT_SEND_MESSAGE`
+2. Server queues in ElunaSharedData (`agent_inbox_<name>`)
+3. AI agent polls via MCP `mcp_agent_poll_messages`
+4. AI agent responds via MCP `mcp_agent_send_message`
+5. Server pushes to player via AMS `AGENT_MESSAGE_RESPONSE`
+
+**AMS Handlers (Client):**
+- `AGENT_LIST_RESPONSE` - Updates agent dropdown
+- `AGENT_SEND_MESSAGE_RESPONSE` - Confirms message sent
+- `AGENT_MESSAGE_RESPONSE` - Receives agent responses
+
+**For AI Agents (MCP Tools):**
+```
+1. mcp_agent_register({name: "Scarlet", owner: "Cascade"})
+2. mcp_agent_poll_messages({name: "Scarlet"}) - returns pending messages
+3. mcp_agent_send_message({name: "Scarlet", to_player_guid: X, content: "..."})
+4. mcp_agent_unregister({name: "Scarlet"}) - when done
+```
+
 ## Future Expansion Ideas
 - Item Info Panel - View item details, stats, sources
 - Quest Info Panel - Quest chains, requirements, rewards
@@ -232,4 +262,5 @@ UIParent
 - Macro Builder - Generate TrinityCore command macros
 
 ## Version History
+- v1.1.0 - Added Agent Chat panel for AI assistant communication
 - v1.0.0 - Initial release with NPC Info panel, tab navigation, 3D model viewer

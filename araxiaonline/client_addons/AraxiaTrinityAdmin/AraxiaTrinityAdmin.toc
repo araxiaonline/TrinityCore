@@ -9,7 +9,9 @@
 Core.lua
 ServerDataModule.lua
 AMSTestClient.lua
+MCPBridge.lua
 UI/MainWindow.lua
 UI/MinimapButton.lua
 UI/Panels/NPCInfoPanel.lua
 UI/Panels/AddNPCPanel.lua
+UI/Panels/AgentChatPanel.lua

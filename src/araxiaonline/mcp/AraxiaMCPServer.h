@@ -108,6 +108,7 @@ void RegisterWorldTools();
 void RegisterWorldScanTools();  // LIDAR-style spatial awareness
 void RegisterSpawnTools();      // Headless spawn management (no player required)
 void RegisterMCPPlayerTools();  // AI player session management
+void RegisterAgentTools();      // Agent chat - bidirectional player↔AI messaging
 
 } // namespace Araxia
 
