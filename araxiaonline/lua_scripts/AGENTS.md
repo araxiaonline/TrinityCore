@@ -1,19 +1,46 @@
 # Eluna Lua Scripts - Agent Guidelines
 
-## ⚠️ IMPORTANT: Commit Workflow
+## ⚠️ CRITICAL: File Editing Locations
 
-**This directory (`/opt/trinitycore/server/lua_scripts/`) is NOT a git repo.**
+### Server-Side Lua Scripts
+- **EDIT HERE (running server):** `/opt/trinitycore/lua_scripts/`
+- **COMMIT FROM:** `/opt/trinitycore/TrinityCore/araxiaonline/lua_scripts/`
 
-To commit changes to lua_scripts:
-1. Copy modified files to: `/opt/trinitycore/TrinityCore/araxiaonline/lua_scripts/`
-2. Commit from the TrinityCore repo
+### Client-Side Addons (WoW Client)
+- **EDIT HERE (running client):** `/opt/trinitycore/Interface/AddOns/`
+- **COMMIT FROM:** `/opt/trinitycore/TrinityCore/araxiaonline/client_addons/`
+
+### Commit Workflow
+Before committing, sync files from running locations to repo locations:
 
 ```bash
-# Example sync command
-cp -r /opt/trinitycore/server/lua_scripts/* /opt/trinitycore/TrinityCore/araxiaonline/lua_scripts/
+# Sync lua_scripts
+cp -r /opt/trinitycore/lua_scripts/* /opt/trinitycore/TrinityCore/araxiaonline/lua_scripts/
+
+# Sync client addons
+cp -r /opt/trinitycore/Interface/AddOns/AraxiaTrinityAdmin/* /opt/trinitycore/TrinityCore/araxiaonline/client_addons/AraxiaTrinityAdmin/
+cp -r /opt/trinitycore/Interface/AddOns/AMS_Client/* /opt/trinitycore/TrinityCore/araxiaonline/client_addons/AMS_Client/
 ```
 
-**AI assistants: Do this automatically when committing session work.**
+**AI assistants: ALWAYS edit the running locations, then sync before committing.**
+
+---
+
+## ⚠️ NEVER Defer Documentation
+
+**Documentation is CRITICAL and must never be skipped or deferred.**
+
+Why:
+- AI assistants have limited context windows
+- Documentation is how future sessions understand past decisions
+- Without docs, work gets duplicated or misunderstood
+- Code comments, READMEs, and wiki pages are essential deliverables
+
+**Every feature/change must include:**
+1. Code comments explaining non-obvious decisions
+2. Updated README if user-facing
+3. Wiki/AGENTS.md updates for AI context
+4. Inline examples where helpful
 
 ---
 

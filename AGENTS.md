@@ -18,6 +18,24 @@ Documentation with status can be found in [ELUNA_INTEGRATION_COMPLETE.md](ELUNA_
 
 ---
 
+## ⚠️ NEVER Defer Documentation
+
+**Documentation is CRITICAL and must never be skipped or deferred.**
+
+Why:
+- AI assistants have limited context windows
+- Documentation is how future sessions understand past decisions
+- Without docs, work gets duplicated or misunderstood
+- Code comments, READMEs, and wiki pages are essential deliverables
+
+**Every feature/change must include:**
+1. Code comments explaining non-obvious decisions
+2. Updated README if user-facing
+3. Wiki/AGENTS.md updates for AI context
+4. Inline examples where helpful
+
+---
+
 ## Code Commenting Guidelines
 
 **ALWAYS add comments when modifying C++ code in this project.**

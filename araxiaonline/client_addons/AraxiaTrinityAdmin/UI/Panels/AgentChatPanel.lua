@@ -17,9 +17,12 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
 local chatPanel = CreateFrame("Frame", "AraxiaTrinityAdminAgentChatPanel", UIParent)
 chatPanel:Hide()
 
--- Chat history storage
+-- Chat history storage (persisted via SavedVariables)
 local chatHistory = {}  -- { {from="player"|"agent", agent_name, content, timestamp, message_id}, ... }
 local MAX_HISTORY = 200
+
+-- Message send status tracking
+local pendingMessageId = nil
 
 -- Current selected agent
 local selectedAgent = nil
@@ -27,6 +30,9 @@ local availableAgents = {}
 
 -- Polling state
 local isSubscribed = false
+
+-- Status indicator for message sending
+local sendStatusText = nil  -- Will be created after chatPanel is set up
 
 -- ============================================================================
 -- Header Section
@@ -40,9 +46,18 @@ title:SetText("Agent Chat")
 local agentDropdown = CreateFrame("Frame", "AgentChatAgentDropdown", chatPanel, "UIDropDownMenuTemplate")
 agentDropdown:SetPoint("LEFT", title, "RIGHT", 10, -2)
 
+local function GetAgentStatusText(agentName)
+    for _, agent in ipairs(availableAgents) do
+        if agent.name == agentName then
+            return agentName .. (agent.online and " |cFF00FF00(online)|r" or " |cFF888888(offline)|r")
+        end
+    end
+    return agentName or "Select Agent"
+end
+
 local function AgentDropdown_OnClick(self, arg1, arg2, checked)
     selectedAgent = arg1
-    UIDropDownMenu_SetText(agentDropdown, arg1 or "Select Agent")
+    UIDropDownMenu_SetText(agentDropdown, GetAgentStatusText(arg1))
 end
 
 local function AgentDropdown_Initialize(self, level)
@@ -72,9 +87,9 @@ UIDropDownMenu_Initialize(agentDropdown, AgentDropdown_Initialize)
 
 -- Refresh agents button
 local refreshAgentsBtn = CreateFrame("Button", nil, chatPanel, "UIPanelButtonTemplate")
-refreshAgentsBtn:SetSize(24, 24)
+refreshAgentsBtn:SetSize(60, 24)
 refreshAgentsBtn:SetPoint("LEFT", agentDropdown, "RIGHT", -10, 2)
-refreshAgentsBtn:SetText("R")
+refreshAgentsBtn:SetText("Reload")
 refreshAgentsBtn:SetScript("OnClick", function()
     if AMS then
         AMS.Send("AGENT_LIST_REQUEST", {})
@@ -87,10 +102,16 @@ refreshAgentsBtn:SetScript("OnEnter", function(self)
 end)
 refreshAgentsBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
--- Status indicator
+-- Status indicator (connection status)
 local statusText = chatPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 statusText:SetPoint("TOPRIGHT", chatPanel, "TOPRIGHT", -10, -14)
 statusText:SetText("|cFF888888Disconnected|r")
+
+-- Message send status indicator (shows Sending.../Delivered)
+sendStatusText = chatPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+sendStatusText:SetPoint("TOPRIGHT", chatPanel, "TOPRIGHT", -10, -28)
+sendStatusText:SetText("")
+sendStatusText:Hide()
 
 -- ============================================================================
 -- Chat History Display
@@ -109,7 +130,7 @@ chatContainer:SetBackdropColor(0.05, 0.05, 0.05, 0.9)
 chatContainer:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
 
 local chatScroll = CreateFrame("ScrollFrame", "AgentChatScrollFrame", chatContainer, "UIPanelScrollFrameTemplate")
-chatScroll:SetPoint("TOPLEFT", chatContainer, "TOPLEFT", 8, -8)
+chatScroll:SetPoint("TOPLEFT", chatContainer, "TOPLEFT", 5, -8)
 chatScroll:SetPoint("BOTTOMRIGHT", chatContainer, "BOTTOMRIGHT", -28, 8)
 
 local chatScrollChild = CreateFrame("Frame", nil, chatScroll)
@@ -127,11 +148,13 @@ end
 
 local function AddMessageToDisplay(from, agentName, content, timestamp, isFromPlayer)
     local frame = CreateFrame("Frame", nil, chatScrollChild)
-    frame:SetWidth(chatScrollChild:GetWidth() - 10)
+    local frameWidth = chatScrollChild:GetWidth() - 20
+    if frameWidth < 100 then frameWidth = 400 end  -- Fallback width
+    frame:SetWidth(frameWidth)
     
     -- Header line (name + timestamp)
     local header = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    header:SetPoint("TOPLEFT", frame, "TOPLEFT", 5, -5)
+    header:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -5)
     
     if isFromPlayer then
         header:SetText("|cFF00CCFF" .. UnitName("player") .. "|r |cFF888888" .. FormatTimestamp(timestamp) .. "|r")
@@ -139,13 +162,15 @@ local function AddMessageToDisplay(from, agentName, content, timestamp, isFromPl
         header:SetText("|cFF00FF00" .. (agentName or "Agent") .. "|r |cFF888888" .. FormatTimestamp(timestamp) .. "|r")
     end
     
-    -- Content
+    -- Content - displayed below header
     local contentText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    contentText:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -3)
-    contentText:SetPoint("RIGHT", frame, "RIGHT", -5, 0)
+    contentText:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -2)
+    contentText:SetWidth(frameWidth - 20)
     contentText:SetJustifyH("LEFT")
-    contentText:SetText(content)
     contentText:SetWordWrap(true)
+    local displayContent = content or ""
+    if displayContent == "" then displayContent = "[empty]" end
+    contentText:SetText(displayContent)
     
     -- Calculate height
     local contentHeight = contentText:GetStringHeight()
@@ -159,6 +184,7 @@ local function AddMessageToDisplay(from, agentName, content, timestamp, isFromPl
     frame:SetPoint("TOPLEFT", chatScrollChild, "TOPLEFT", 0, -yOffset)
     
     table.insert(messageFrames, frame)
+    frame:Show()
     
     -- Update scroll child height
     chatScrollChild:SetHeight(yOffset + frame:GetHeight() + 10)
@@ -238,6 +264,11 @@ local function SendMessage()
         }
     end
     
+    -- Show sending status
+    pendingMessageId = "local_" .. time()
+    sendStatusText:SetText("|cFFFFFF00Sending...|r")
+    sendStatusText:Show()
+    
     -- Send message
     AMS.Send("AGENT_SEND_MESSAGE", {
         agent_name = selectedAgent,
@@ -251,7 +282,7 @@ local function SendMessage()
         agent_name = selectedAgent,
         content = text,
         timestamp = time(),
-        message_id = "local_" .. time()
+        message_id = pendingMessageId
     }
     table.insert(chatHistory, msg)
     
@@ -298,10 +329,12 @@ local function InitAMSHandlers()
             availableAgents = data.agents or {}
             UIDropDownMenu_Initialize(agentDropdown, AgentDropdown_Initialize)
             
-            -- Auto-select first agent if none selected
+            -- Auto-select first agent if none selected, or update status display
             if not selectedAgent and #availableAgents > 0 then
                 selectedAgent = availableAgents[1].name
-                UIDropDownMenu_SetText(agentDropdown, selectedAgent)
+            end
+            if selectedAgent then
+                UIDropDownMenu_SetText(agentDropdown, GetAgentStatusText(selectedAgent))
             end
             
             print("|cFF00FF00[Agent Chat]|r Found " .. #availableAgents .. " agent(s)")
@@ -310,9 +343,22 @@ local function InitAMSHandlers()
     
     -- Handle send confirmation
     AMS.RegisterHandler("AGENT_SEND_MESSAGE_RESPONSE", function(data)
-        if not data.success then
+        if data.success then
+            -- Show delivered status briefly
+            sendStatusText:SetText("|cFF00FF00Delivered ✓|r")
+            C_Timer.After(3, function()
+                sendStatusText:SetText("")
+                sendStatusText:Hide()
+            end)
+        else
+            sendStatusText:SetText("|cFFFF0000Failed|r")
             print("|cFFFF0000[Agent Chat]|r Failed to send: " .. (data.error or "Unknown error"))
+            C_Timer.After(5, function()
+                sendStatusText:SetText("")
+                sendStatusText:Hide()
+            end)
         end
+        pendingMessageId = nil
     end)
     
     -- Handle agent responses (push delivery)
@@ -402,14 +448,46 @@ pollBtn:SetScript("OnClick", function()
     end
 end)
 
--- Clear chat button
+-- Clear chat button (positioned left of status text)
 local clearBtn = CreateFrame("Button", nil, chatPanel, "UIPanelButtonTemplate")
 clearBtn:SetSize(50, 22)
-clearBtn:SetPoint("TOPRIGHT", chatPanel, "TOPRIGHT", -10, -35)
+clearBtn:SetPoint("RIGHT", statusText, "LEFT", -10, 0)
 clearBtn:SetText("Clear")
 clearBtn:SetScript("OnClick", function()
     chatHistory = {}
     ClearMessageDisplay()
+end)
+
+-- ============================================================================
+-- SavedVariables Persistence
+-- ============================================================================
+
+-- Load chat history from SavedVariables on login
+local function LoadChatHistory()
+    if AraxiaTrinityAdminDB and AraxiaTrinityAdminDB.AgentChatHistory then
+        chatHistory = AraxiaTrinityAdminDB.AgentChatHistory
+        -- Refresh display with loaded history
+        C_Timer.After(0.5, function()
+            RefreshChatDisplay()
+        end)
+    end
+end
+
+-- Save chat history to SavedVariables on logout
+local function SaveChatHistory()
+    if not AraxiaTrinityAdminDB then
+        AraxiaTrinityAdminDB = {}
+    end
+    AraxiaTrinityAdminDB.AgentChatHistory = chatHistory
+end
+
+-- Register for logout event to save history
+local saveFrame = CreateFrame("Frame")
+saveFrame:RegisterEvent("PLAYER_LOGOUT")
+saveFrame:SetScript("OnEvent", function(self, event)
+    if event == "PLAYER_LOGOUT" then
+        SaveChatHistory()
+    end
 end)
 
 -- ============================================================================
@@ -420,6 +498,7 @@ local function InitPanel()
     if ATA.MainWindow then
         ATA.MainWindow:RegisterPanel("AgentChat", "Agent Chat", chatPanel)
         InitAMSHandlers()
+        LoadChatHistory()  -- Load saved history after init
     else
         C_Timer.After(0.1, InitPanel)
     end
@@ -430,5 +509,6 @@ C_Timer.After(0.1, InitPanel)
 -- Make available globally for debugging
 ATA.AgentChatPanel = chatPanel
 ATA.AgentChatHistory = chatHistory
+ATA.SaveAgentChatHistory = SaveChatHistory  -- Allow manual save
 
 end)  -- End ADDON_LOADED handler
