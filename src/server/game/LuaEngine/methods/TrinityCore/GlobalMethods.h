@@ -3410,9 +3410,17 @@ namespace LuaGlobalFunctions
                 lua_setfield(L, -2, "delay");
             }
             
-            // MoveType is WaypointMoveType enum
-            lua_pushinteger(L, static_cast<int>(node.MoveType));
-            lua_setfield(L, -2, "moveType");
+            // MoveType is Optional<WaypointMoveType>
+            if (node.MoveType)
+            {
+                lua_pushinteger(L, static_cast<int>(*node.MoveType));
+                lua_setfield(L, -2, "moveType");
+            }
+            else
+            {
+                lua_pushinteger(L, 0);  // Default to WAYPOINT_MOVE_TYPE_WALK
+                lua_setfield(L, -2, "moveType");
+            }
             
             lua_rawseti(L, -2, nodeIndex++);
         }
