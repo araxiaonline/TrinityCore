@@ -15,7 +15,7 @@
 #include "GameObject.h"
 #include "Log.h"
 #include "VMapFactory.h"
-#include "VMapManager2.h"
+#include "VMapManager.h"
 #include "VMapDefinitions.h"
 #include "DatabaseEnv.h"
 #include "StringFormat.h"
@@ -55,7 +55,7 @@ RayCastResult CastRay(Map* map, float startX, float startY, float startZ,
     
     // Use VMAP for line of sight check
     // Note: isInLineOfSight returns true if CAN see (no obstacle)
-    VMAP::VMapManager2* vmgr = VMAP::VMapFactory::createOrGetVMapManager();
+    VMAP::VMapManager* vmgr = VMAP::VMapFactory::createOrGetVMapManager();
     if (vmgr)
     {
         // Binary search to find collision distance

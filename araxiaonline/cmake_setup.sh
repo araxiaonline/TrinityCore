@@ -9,6 +9,7 @@ cmake .. \
     -DSERVERS=1 \
     -DSCRIPTS=static \
     -DWITH_WARNINGS=1 \
+    -DBUILD_EFSW=1 \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache \
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 

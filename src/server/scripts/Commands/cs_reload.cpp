@@ -50,7 +50,6 @@ EndScriptData */
 #include "SpellMgr.h"
 #include "SupportMgr.h"
 #include "VehicleDefines.h"
-#include "WardenCheckMgr.h"
 #include "WaypointManager.h"
 #include "World.h"
 

@@ -1,10 +1,3 @@
-# araxia changes that we are commenting out for now.
-#if (NOT BUILD_SHARED_LIBS)
-#  set(EFSW_CPP_SOURCE
-#    src/efsw/Atomic.hpp
-#    src/efsw/base.hpp
-
-
 add_library(efsw STATIC)
 
 if(WIN32)
