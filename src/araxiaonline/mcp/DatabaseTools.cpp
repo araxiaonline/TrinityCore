@@ -70,14 +70,14 @@ void RegisterDatabaseTools()
     // db_query - Execute SELECT query on any database
     sMCPServer->RegisterTool(
         "db_query",
-        "Execute a SELECT query on the specified database (world, characters, auth). Returns rows as JSON.",
+        "Execute a SELECT query on the specified database (world, characters, auth, hotfixes). Returns rows as JSON.",
         {
             {"type", "object"},
             {"properties", {
                 {"database", {
                     {"type", "string"},
-                    {"description", "Database to query: world, characters, or auth"},
-                    {"enum", {"world", "characters", "auth"}}
+                    {"description", "Database to query: world, characters, auth, or hotfixes"},
+                    {"enum", {"world", "characters", "auth", "hotfixes"}}
                 }},
                 {"query", {
                     {"type", "string"},
@@ -111,7 +111,7 @@ void RegisterDatabaseTools()
             }
             
             TC_LOG_DEBUG("araxia.mcp", "[MCP] db_query on {}: {}", database, query);
-            
+
             try
             {
                 QueryResult result;
@@ -121,9 +121,11 @@ void RegisterDatabaseTools()
                     result = CharacterDatabase.Query(query.c_str());
                 else if (database == "auth")
                     result = LoginDatabase.Query(query.c_str());
+                else if (database == "hotfixes")
+                    result = HotfixDatabase.Query(query.c_str());
                 else
                     return {{"success", false}, {"error", "Unknown database: " + database}};
-                
+
                 json data = QueryResultToJson(result);
                 data["success"] = true;
                 data["database"] = database;
@@ -163,8 +165,8 @@ void RegisterDatabaseTools()
             {"properties", {
                 {"database", {
                     {"type", "string"},
-                    {"description", "Database to modify: world, characters, or auth"},
-                    {"enum", {"world", "characters", "auth"}}
+                    {"description", "Database to modify: world, characters, auth, or hotfixes"},
+                    {"enum", {"world", "characters", "auth", "hotfixes"}}
                 }},
                 {"query", {
                     {"type", "string"},
@@ -210,6 +212,8 @@ void RegisterDatabaseTools()
                     CharacterDatabase.DirectExecute(query.c_str());
                 else if (database == "auth")
                     LoginDatabase.DirectExecute(query.c_str());
+                else if (database == "hotfixes")
+                    HotfixDatabase.DirectExecute(query.c_str());
                 else
                     return {{"success", false}, {"error", "Unknown database: " + database}};
                 
@@ -247,15 +251,15 @@ void RegisterDatabaseTools()
             {"properties", {
                 {"database", {
                     {"type", "string"},
-                    {"description", "Database to list: world, characters, or auth"},
-                    {"enum", {"world", "characters", "auth"}}
+                    {"description", "Database to list: world, characters, auth, or hotfixes"},
+                    {"enum", {"world", "characters", "auth", "hotfixes"}}
                 }}
             }},
             {"required", {"database"}}
         },
         [](const json& params) -> json {
             std::string database = params.value("database", "world");
-            
+
             try
             {
                 QueryResult result;
@@ -265,6 +269,8 @@ void RegisterDatabaseTools()
                     result = CharacterDatabase.Query("SHOW TABLES");
                 else if (database == "auth")
                     result = LoginDatabase.Query("SHOW TABLES");
+                else if (database == "hotfixes")
+                    result = HotfixDatabase.Query("SHOW TABLES");
                 else
                     return {{"success", false}, {"error", "Unknown database: " + database}};
                 
@@ -307,7 +313,7 @@ void RegisterDatabaseTools()
                 {"database", {
                     {"type", "string"},
                     {"description", "Database containing the table"},
-                    {"enum", {"world", "characters", "auth"}}
+                    {"enum", {"world", "characters", "auth", "hotfixes"}}
                 }},
                 {"table", {
                     {"type", "string"},
@@ -319,16 +325,16 @@ void RegisterDatabaseTools()
         [](const json& params) -> json {
             std::string database = params.value("database", "world");
             std::string table = params.value("table", "");
-            
+
             // Sanitize table name (alphanumeric and underscore only)
             for (char c : table)
             {
                 if (!std::isalnum(c) && c != '_')
                     return {{"success", false}, {"error", "Invalid table name"}};
             }
-            
+
             std::string query = "DESCRIBE " + table;
-            
+
             try
             {
                 QueryResult result;
@@ -338,6 +344,8 @@ void RegisterDatabaseTools()
                     result = CharacterDatabase.Query(query.c_str());
                 else if (database == "auth")
                     result = LoginDatabase.Query(query.c_str());
+                else if (database == "hotfixes")
+                    result = HotfixDatabase.Query(query.c_str());
                 else
                     return {{"success", false}, {"error", "Unknown database: " + database}};
                 
