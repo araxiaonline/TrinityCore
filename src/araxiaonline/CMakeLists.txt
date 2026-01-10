@@ -5,8 +5,8 @@
 add_subdirectory(eventbus)
 
 # Collect sources EXCLUDING certain directories
-# 
-# IMPORTANT: CollectSourceFiles (defined in cmake/macros/AutoCollect.cmake) requires
+#
+# IMPORTANT: CollectAndAddSourceFiles (defined in cmake/macros/AutoCollect.cmake) requires
 # FULL PATHS for exclusions, not just directory names. Using bare names like "eventbus"
 # will silently fail to exclude the directory.
 #
@@ -18,10 +18,10 @@ add_subdirectory(eventbus)
 #            Since gamePCH.h includes C++ headers (<cstddef>, etc.), the C PCH build
 #            fails with "cstddef file not found". Excluding tools/ prevents this.
 #
-CollectSourceFiles(
+CollectAndAddSourceFiles(
+  game
   ${CMAKE_CURRENT_SOURCE_DIR}
-  PRIVATE_SOURCES
-  # Exclude - MUST be full paths, see comment above
+  EXCLUDE
   ${CMAKE_CURRENT_SOURCE_DIR}/eventbus
   ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 
@@ -36,12 +36,6 @@ target_include_directories(game
     ${CMAKE_CURRENT_SOURCE_DIR}/game/Entities/Creature
     ${CMAKE_CURRENT_SOURCE_DIR}/mcp
     ${CMAKE_CURRENT_SOURCE_DIR}/eventbus
-)
-
-# Add sources to the game target
-target_sources(game
-  PRIVATE
-    ${PRIVATE_SOURCES}
 )
 
 # Link eventbus library (brings in ZMQ transitively)

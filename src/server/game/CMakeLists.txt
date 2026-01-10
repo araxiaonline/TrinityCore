@@ -63,11 +63,7 @@ target_link_directories(lualib INTERFACE ${LUAJIT_LIBRARY_DIR})
 target_link_libraries(lualib INTERFACE luajit-5.1 efsw)
 target_compile_definitions(lualib INTERFACE ELUNA LUAJIT_VERSION ELUNA_TRINITY ELUNA_EXPANSION=9)
 
-add_library(game
-  ${PRIVATE_SOURCES})
-
-# upstream from TC
-# add_library(game)
+add_library(game)
 
 CollectAndAddSourceFiles(
   game
