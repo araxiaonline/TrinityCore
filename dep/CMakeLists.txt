@@ -31,9 +31,12 @@ if(SERVERS)
   add_subdirectory(readline)
   add_subdirectory(gsoap)
   add_subdirectory(rapidjson)
-  add_subdirectory(efsw)
   add_subdirectory(protobuf)
   add_subdirectory(zeromq)
+endif()
+
+if(SERVERS AND BUILD_EFSW)
+  add_subdirectory(efsw)
 endif()
 
 if(TOOLS)

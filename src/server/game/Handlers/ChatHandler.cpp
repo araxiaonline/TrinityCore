@@ -39,7 +39,6 @@
 #include "ScriptMgr.h"
 #include "SpellAuraEffects.h"
 #include "Util.h"
-#include "Warden.h"
 #include "World.h"
 #ifdef ELUNA
 #include "LuaEngine/LuaEngine.h"
@@ -523,13 +522,6 @@ void WorldSession::HandleChatAddonMessage(ChatMsg type, std::string prefix, std:
     {
         TC_LOG_DEBUG("ams.debug", "REJECTED: Invalid prefix length ({})", prefix.length());
         return;
-    }
-
-    // Our Warden module also uses SendAddonMessage as a way to communicate Lua check results to the server, see if this is that
-    if (type == CHAT_MSG_GUILD)
-    {
-        if (_warden && _warden->ProcessLuaCheckResponse(text))
-            return;
     }
 
     // Disabled addon channel?
