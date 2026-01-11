@@ -378,7 +378,7 @@ WorldSession* MCPPlayerManager::CreateBotSession(uint32 sessionId, uint32 accoun
         std::string("MCPBot"),              // Account name
         0,                                  // Battlenet account ID
         std::string(""),                    // Battlenet account email
-        nullptr,                            // Socket = NULL (no network!)
+        std::shared_ptr<WorldSocket>(),     // Socket = NULL (no network!)
         SEC_GAMEMASTER,                     // Security level - GM for full access
         EXPANSION_THE_WAR_WITHIN,           // Expansion
         0,                                  // Mute time
