@@ -3,7 +3,8 @@
 # run this script from the build directory with
 # bash ../araxiaonline/cmake_setup.sh
 cmake .. \
-    -DCMAKE_INSTALL_PREFIX="/opt/trinitycore/server" \
+    -DCMAKE_INSTALL_PREFIX="/opt/araxiaonline/araxia-trinity-drwow/server" \
+    -DCONF_DIR="/opt/araxiaonline/araxia-trinity-drwow/server/etc" \
     -DCMAKE_BUILD_TYPE="RelWithDebInfo" \
     -DTOOLS=1 \
     -DSERVERS=1 \
